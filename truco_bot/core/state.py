@@ -1,0 +1,233 @@
+import copy
+from dataclasses import dataclass, field
+
+from truco_bot.core.actions import Action
+from truco_bot.core.card import Card
+from truco_bot.core.rules import (
+    calculate_envido,
+    calculate_falta_envido_points,
+    compare_cards,
+    resolve_hand,
+)
+
+
+@dataclass(slots=True)
+class GameState:
+    hands: list[list[Card]]
+    mano: int
+    active_player: int
+    score_p0: int = 0
+    score_p1: int = 0
+    max_score: int = 30
+    current_trick: int = 0
+    trick_cards: list[tuple[int, Card]] = field(default_factory=list)
+    trick_results: list[int] = field(default_factory=list)
+    trick_leader: int = 0
+    
+    envido_resolved: bool = False
+    envido_chain: list[Action] = field(default_factory=list)
+    pending_envido_response: bool = False
+    pending_envido_from: int | None = None
+    
+    truco_level: int = 1
+    truco_caller: int | None = None
+    pending_truco_response: bool = False
+    pending_truco_from: int | None = None
+    
+    is_hand_done: bool = False
+    winner: int | None = None
+    points_won: int = 0
+
+def create_initial_hand_state(
+            hands: list[list[Card]], 
+            mano: int = 0, score_p0: int = 0, 
+            score_p1: int = 0, 
+            max_score: int = 30
+        ) -> GameState:
+    return GameState(
+        hands=hands,
+        mano=mano,
+        active_player=mano,
+        score_p0=score_p0,
+        score_p1=score_p1,
+        max_score=max_score,
+        trick_leader=mano
+    )
+
+def get_legal_actions(state: GameState) -> list[Action]:
+    if state.is_hand_done:
+        return []
+
+    actions = []
+    player = state.active_player
+    
+    if state.pending_envido_response:
+        actions.extend([Action.QUIERO_ENVIDO, Action.NO_QUIERO_ENVIDO])
+        last_call = state.envido_chain[-1] if state.envido_chain else None
+        if last_call == Action.ENVIDO:
+            actions.extend([Action.ENVIDO, Action.REAL_ENVIDO, Action.FALTA_ENVIDO])
+        elif last_call == Action.REAL_ENVIDO:
+            actions.append(Action.FALTA_ENVIDO)
+        return actions
+
+    if state.pending_truco_response:
+        actions.extend([Action.QUIERO_TRUCO, Action.NO_QUIERO_TRUCO, Action.IR_AL_MAZO])
+        if state.truco_level == 2:
+            actions.append(Action.RETRUCO)
+        elif state.truco_level == 3:
+            actions.append(Action.VALE_CUATRO)
+        return actions
+
+    # envido
+    if state.current_trick == 0 and not state.envido_resolved and len(state.trick_cards) < 2 and len(state.envido_chain) == 0:
+        actions.extend([Action.ENVIDO, Action.REAL_ENVIDO, Action.FALTA_ENVIDO])
+
+    # truco
+    if state.truco_level == 1:
+        actions.append(Action.TRUCO)
+    elif state.truco_level == 2 and state.truco_caller != player:
+        actions.append(Action.RETRUCO)
+    elif state.truco_level == 3 and state.truco_caller != player:
+        actions.append(Action.VALE_CUATRO)
+
+    # card plays
+    hand = state.hands[player]
+    if len(hand) > 0:
+        actions.append(Action.PLAY_CARD_0)
+        actions.append(Action.PLAY_CARD_DOWN_0)
+    if len(hand) > 1:
+        actions.append(Action.PLAY_CARD_1)
+        actions.append(Action.PLAY_CARD_DOWN_1)
+    if len(hand) > 2:
+        actions.append(Action.PLAY_CARD_2)
+        actions.append(Action.PLAY_CARD_DOWN_2)
+
+    actions.append(Action.IR_AL_MAZO)
+    return actions
+
+def step(state: GameState, action: Action) -> GameState:
+    new_state = copy.deepcopy(state)
+    player = new_state.active_player
+    other_player = 1 - player
+
+    if action == Action.IR_AL_MAZO:
+        new_state.is_hand_done = True
+        new_state.winner = other_player
+        new_state.points_won = new_state.truco_level
+        return new_state
+
+    if action in [Action.ENVIDO, Action.REAL_ENVIDO, Action.FALTA_ENVIDO]:
+        new_state.envido_chain.append(action)
+        new_state.pending_envido_response = True
+        new_state.pending_envido_from = other_player
+        new_state.active_player = other_player
+        return new_state
+
+    if action == Action.QUIERO_ENVIDO:
+        new_state.envido_chain.append(action)
+        new_state.pending_envido_response = False
+        new_state.envido_resolved = True
+        new_state.active_player = other_player if len(new_state.trick_cards) % 2 == 1 else new_state.trick_leader
+        
+        envido_p0 = calculate_envido(new_state.hands[0])
+        envido_p1 = calculate_envido(new_state.hands[1])
+        winner = 0 if envido_p0 > envido_p1 else (1 if envido_p1 > envido_p0 else new_state.mano)
+        
+        pts = 0
+        for call in new_state.envido_chain:
+            if call == Action.ENVIDO:
+                pts += 2
+            elif call == Action.REAL_ENVIDO:
+                pts += 3
+            elif call == Action.FALTA_ENVIDO:
+                pts += calculate_falta_envido_points(
+                    new_state.score_p0, new_state.score_p1, new_state.max_score
+                )
+        if winner == 0:
+            new_state.score_p0 += pts
+        else:
+            new_state.score_p1 += pts
+            
+        return new_state
+
+    if action == Action.NO_QUIERO_ENVIDO:
+        new_state.envido_chain.append(action)
+        new_state.pending_envido_response = False
+        new_state.envido_resolved = True
+        new_state.active_player = other_player if len(new_state.trick_cards) % 2 == 1 else new_state.trick_leader
+        
+        caller = other_player
+        chain = new_state.envido_chain
+        if len(chain) == 2:
+            pts = 1
+        else:
+            pts = 0
+            for call in chain[:-2]:
+                if call == Action.ENVIDO:
+                    pts += 2
+                elif call == Action.REAL_ENVIDO:
+                    pts += 3
+            if pts == 0:
+                pts = 1
+
+        if caller == 0:
+            new_state.score_p0 += pts
+        else:
+            new_state.score_p1 += pts
+            
+        return new_state
+
+    if action in [Action.TRUCO, Action.RETRUCO, Action.VALE_CUATRO]:
+        new_state.pending_truco_response = True
+        new_state.pending_truco_from = other_player
+        new_state.truco_caller = player
+        new_state.active_player = other_player
+        if not new_state.envido_resolved:
+            new_state.envido_resolved = True
+        return new_state
+
+    if action == Action.QUIERO_TRUCO:
+        new_state.pending_truco_response = False
+        new_state.truco_level += 1
+        new_state.active_player = other_player if len(new_state.trick_cards) % 2 == 1 else new_state.trick_leader
+        return new_state
+
+    if action == Action.NO_QUIERO_TRUCO:
+        new_state.is_hand_done = True
+        new_state.winner = other_player
+        new_state.points_won = new_state.truco_level
+        return new_state
+
+    if 0 <= action.value <= 5: # PLAY_CARD
+        if not new_state.envido_resolved:
+            new_state.envido_resolved = True
+            
+        card_idx = action.value % 3
+        card = new_state.hands[player].pop(card_idx)
+        new_state.trick_cards.append((player, card))
+        
+        if len(new_state.trick_cards) == 2:
+            p0_card = new_state.trick_cards[0][1] if new_state.trick_cards[0][0] == 0 else new_state.trick_cards[1][1]
+            p1_card = new_state.trick_cards[1][1] if new_state.trick_cards[1][0] == 1 else new_state.trick_cards[0][1]
+            
+            res = compare_cards(p0_card, p1_card)
+            new_state.trick_results.append(res)
+            
+            hr = resolve_hand(new_state.trick_results, new_state.mano)
+            if hr is not None:
+                new_state.is_hand_done = True
+                new_state.winner = hr
+                new_state.points_won = new_state.truco_level
+            else:
+                new_state.current_trick += 1
+                if res != 0:
+                    winner_player = 0 if res == 1 else 1
+                    new_state.trick_leader = winner_player
+                    new_state.active_player = winner_player
+                else:
+                    new_state.active_player = new_state.trick_leader
+                new_state.trick_cards = []
+        else:
+            new_state.active_player = other_player
+
+    return new_state
