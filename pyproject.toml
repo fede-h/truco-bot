@@ -22,6 +22,9 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "benchmark: throughput performance benchmarks",
+]
 filterwarnings = [
     "ignore::pytest.PytestRemovedIn10Warning",
 ]

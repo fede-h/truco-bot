@@ -1,4 +1,3 @@
-# ponytail: minimal action enum, simple helper functions
 from enum import IntEnum
 
 
@@ -15,7 +14,7 @@ class Action(IntEnum):
     FALTA_ENVIDO = 12
     QUIERO_ENVIDO = 13
     NO_QUIERO_ENVIDO = 14
-    
+
     TRUCO = 20
     RETRUCO = 21
     VALE_CUATRO = 22
