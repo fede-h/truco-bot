@@ -1,4 +1,3 @@
-# ponytail: tests for Phase 1 env components
 import random
 
 import pytest

@@ -1,6 +1,5 @@
 """Fast step() / reset() runner for the Truco environment."""
 
-# ponytail: minimal hand simulation environment
 from truco_bot.core.actions import Action
 from truco_bot.core.card import Card
 from truco_bot.core.deck import deal
