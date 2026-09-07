@@ -27,3 +27,6 @@ dist/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Precomputed caches
+truco_bot/core/lookup/*.pkl
