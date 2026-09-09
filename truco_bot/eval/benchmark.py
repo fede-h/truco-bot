@@ -12,6 +12,9 @@ def create_agent(agent_name:str):
     elif agent_name == "equity":
         from truco_bot.agents.baselines.equity import EquityAgent
         return EquityAgent()
+    elif agent_name == "heuristic":
+        from truco_bot.agents.baselines.heuristic import HeuristicAgent
+        return HeuristicAgent()
     else:
         raise ValueError(f"Unknown agent: {agent_name}")
 
