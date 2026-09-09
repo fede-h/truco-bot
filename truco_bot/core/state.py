@@ -98,6 +98,8 @@ def get_legal_actions(state: GameState) -> list[Action]:
     if state.pending_envido_response:
         last_call = state.envido_chain[-1] if state.envido_chain else None
         if last_call == Action.ENVIDO:
+            if state.envido_chain.count(Action.ENVIDO) >= 2:
+                return [Action.QUIERO_ENVIDO, Action.NO_QUIERO_ENVIDO, Action.REAL_ENVIDO, Action.FALTA_ENVIDO]
             return _ENVIDO_CALL_ENVIDO.copy()
         elif last_call == Action.REAL_ENVIDO:
             return _ENVIDO_CALL_REAL.copy()
