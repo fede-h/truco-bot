@@ -21,6 +21,7 @@ class GameState:
     current_trick: int = 0
     trick_cards: list[tuple[int, Card]] = field(default_factory=list)
     trick_results: list[int] = field(default_factory=list)
+    played_cards: list[tuple[int, Card]] = field(default_factory=list)
     trick_leader: int = 0
 
     envido_resolved: bool = False
@@ -163,6 +164,7 @@ def _clone_state(state: GameState) -> GameState:
         state.current_trick,
         state.trick_cards.copy(),
         state.trick_results.copy(),
+        state.played_cards.copy(),
         state.trick_leader,
         state.envido_resolved,
         state.envido_chain.copy(),
@@ -285,6 +287,7 @@ def step(state: GameState, action: Action) -> GameState:
         card_idx = action.value % 3
         card = new_state.hands[player].pop(card_idx)
         new_state.trick_cards.append((player, card))
+        new_state.played_cards.append((player, card))
 
         if len(new_state.trick_cards) == 2:
             p0_card = (
