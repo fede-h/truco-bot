@@ -322,3 +322,33 @@ def step(state: GameState, action: Action) -> GameState:
             new_state.active_player = other_player
 
     return new_state
+
+
+def infoset_key(state:GameState, player:int) -> tuple:
+    """Flat, hashable tuple of everything a player can see."""
+    envido_results:tuple[int | None, int] = (None, 0) # (envido winner, envido points)
+
+    if state.envido_resolved:
+        if state.score_p0 > 0:
+            envido_results = (0, state.score_p0)
+        elif state.score_p1 > 0:
+            envido_results = (1, state.score_p1)
+        else: envido_results = (None, 0)
+    
+    envido_winner = envido_results[0]
+    envido_points = envido_results[1]
+
+    infoset:tuple = (
+        # the hand is sorted so same hands do not get repeated
+        tuple(sorted(state.hands[player], key=lambda c: (c.number, c.suit))),
+        tuple(state.played_cards),
+        tuple(state.trick_results), tuple(state.trick_cards), state.trick_leader,
+        state.mano,
+        envido_winner, envido_points,
+        tuple(state.envido_chain), state.envido_resolved,
+        state.truco_level, state.truco_caller,
+        state.pending_envido_from, state.pending_envido_response,
+        state.pending_truco_from, state.pending_truco_response
+    )
+
+    return infoset
