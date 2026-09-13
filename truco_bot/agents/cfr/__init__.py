@@ -1,1 +1,23 @@
-"""Counterfactual Regret Minimization agents: Tabular CFR, MCCFR."""
+from truco_bot.agents.cfr.agent import VanillaCFRAgent
+from truco_bot.agents.cfr.canonical_solver import CanonicalCFRSolver
+from truco_bot.agents.cfr.chance_sampled_solver import ChanceSampledCFRSolver
+from truco_bot.agents.cfr.isomorphism import (
+    canonical_deal_partitions,
+    canonical_infoset_key,
+    canonicalize_hand,
+    generate_canonical_deals,
+)
+from truco_bot.agents.cfr.node import CFRNode
+from truco_bot.agents.cfr.traversal import cfr_traverse
+
+__all__ = [
+    "CFRNode",
+    "CanonicalCFRSolver",
+    "ChanceSampledCFRSolver",
+    "VanillaCFRAgent",
+    "canonical_deal_partitions",
+    "canonical_infoset_key",
+    "canonicalize_hand",
+    "cfr_traverse",
+    "generate_canonical_deals",
+]
