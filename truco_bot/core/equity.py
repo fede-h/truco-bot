@@ -1,9 +1,11 @@
 """Combinatorial precomputations lookup table."""
 
-from typing_extensions import Tuple
 import itertools
-from .card import Card, ALL_CARDS
+
 from truco_bot.core.rules import calculate_envido
+
+from .card import ALL_CARDS, Card
+
 
 def calculate_envido_equity(
     hand: tuple[Card, Card, Card] | list[Card]) -> tuple[float, float]:
@@ -26,7 +28,7 @@ def calculate_envido_equity(
 if __name__ == "__main__":
     import pickle
 
-    lookup: dict[frozenset, Tuple] = {}
+    lookup: dict[frozenset, tuple] = {}
     for hand in itertools.combinations(ALL_CARDS, 3):
         lookup[frozenset(hand)] = (calculate_envido_equity(hand))
     

@@ -1,7 +1,7 @@
 """Head-to-head match runner and Elo tracker."""
 
-from truco_bot.env.engine import TrucoHandEnv
 from truco_bot.agents.base import Agent
+from truco_bot.env.engine import TrucoHandEnv
 
 
 def _run_single_match(p0_agent:Agent, p1_agent:Agent, env:TrucoHandEnv, seed:int=42) -> int:

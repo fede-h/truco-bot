@@ -4,8 +4,6 @@ from random import choice
 from truco_bot.agents.base import Agent
 from truco_bot.core.actions import Action
 from truco_bot.env.obs import ID_TO_CARD
-from truco_bot.core.equity import calculate_envido_equity
-
 
 with open('truco_bot/core/lookup/equity.pkl', 'rb') as file:
         equity_lookup = pickle.load(file)
