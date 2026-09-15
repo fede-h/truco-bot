@@ -38,6 +38,16 @@ class CFRNode:
             else {a: 0.0 for a in self.actions}
         )
 
+    def apply_regret(self, action: Action, regret: float, cfr_plus: bool = True) -> None:
+        """Accumulate instantaneous regret, optionally floored at zero for CFR+."""
+        current = self.regret_sum.get(action, 0.0) + regret
+        self.regret_sum[action] = max(current, 0.0) if cfr_plus else current
+
+    def accumulate_strategy(self, strategy: dict[Action, float], weight: float = 1.0) -> None:
+        """Accumulate strategy distribution weighted by iteration or realization weight."""
+        for action, prob in strategy.items():
+            self.strategy_sum[action] = self.strategy_sum.get(action, 0.0) + weight * prob
+
     def get_strategy(self, realization_weight: float = 0.0) -> dict[Action, float]:
         """Compute current strategy via regret matching and optionally accumulate strategy sum."""
         normalizing_sum = 0.0
@@ -58,10 +68,7 @@ class CFRNode:
                 strategy[action] = uniform
 
         if realization_weight > 0.0:
-            for action in self.actions:
-                self.strategy_sum[action] = (
-                    self.strategy_sum.get(action, 0.0) + realization_weight * strategy[action]
-                )
+            self.accumulate_strategy(strategy, weight=realization_weight)
 
         return strategy
 

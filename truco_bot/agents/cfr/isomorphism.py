@@ -7,11 +7,20 @@ from collections.abc import Iterator
 from truco_bot.core.card import ALL_CARDS, Card, Suit
 from truco_bot.core.state import GameState, infoset_key
 
+_CANONICAL_HAND_CACHE: dict[tuple[Card, ...], tuple[Card, ...]] = {}
+
 
 def canonicalize_hand(hand: list[Card] | tuple[Card, ...]) -> tuple[Card, ...]:
     """Normalize suits to canonical labels preserving rank, envido value, and suit grouping."""
     if not hand:
         return ()
+
+    cache_key = tuple(
+        sorted(hand, key=lambda c: (-c.truco_rank, -c.envido_value, c.suit.value))
+    )
+    cached = _CANONICAL_HAND_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
 
     counts = Counter(c.suit for c in hand)
 
@@ -36,7 +45,9 @@ def canonicalize_hand(hand: list[Card] | tuple[Card, ...]) -> tuple[Card, ...]:
     canon_cards.sort(
         key=lambda c: (-c.truco_rank, -c.envido_value, c.number, c.suit.value)
     )
-    return tuple(canon_cards)
+    res = tuple(canon_cards)
+    _CANONICAL_HAND_CACHE[cache_key] = res
+    return res
 
 
 def canonical_infoset_key(state: GameState, player: int) -> tuple:
