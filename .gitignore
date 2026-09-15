@@ -30,3 +30,5 @@ Thumbs.db
 
 # Precomputed caches
 truco_bot/core/lookup/*.pkl
+truco_bot/agents/cfr/models/*.pkl
+truco_bot/agents/cfr/models/*.db

@@ -8,6 +8,7 @@ from truco_bot.agents.cfr.isomorphism import (
     generate_canonical_deals,
 )
 from truco_bot.agents.cfr.node import CFRNode
+from truco_bot.agents.cfr.train import train_and_save
 from truco_bot.agents.cfr.traversal import cfr_traverse
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "canonicalize_hand",
     "cfr_traverse",
     "generate_canonical_deals",
+    "train_and_save",
 ]

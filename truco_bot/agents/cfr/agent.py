@@ -1,6 +1,7 @@
-"""Vanilla Counterfactual Regret Minimization Agent."""
-
+import pickle
 import random
+import sqlite3
+from pathlib import Path
 
 from truco_bot.agents.base import Agent
 from truco_bot.core.actions import Action
@@ -16,14 +17,27 @@ class VanillaCFRAgent(Agent):
         policy: dict[tuple, dict[Action, float]] | None = None,
         is_canonical: bool = False,
         seed: int | None = None,
+        db_path: str | Path | None = None,
     ) -> None:
         self.policy: dict[tuple, dict[Action, float]] = policy or {}
         self.is_canonical: bool = is_canonical
         self.rng = random.Random(seed)
+        self.db_path = str(db_path) if db_path else None
+        self._conn: sqlite3.Connection | None = None
+        if self.db_path:
+            self._conn = sqlite3.connect(self.db_path)
 
         # Build secondary index for fast fallback lookup: (hand_key, current_trick, truco_level, pending_e, pending_t)
         self._fallback_index: dict[tuple, dict[Action, float]] = {}
-        self._rebuild_fallback_index()
+        if not self.db_path and len(self.policy) <= 500_000:
+            self._rebuild_fallback_index()
+
+    def __del__(self) -> None:
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except sqlite3.Error:
+                pass
 
     def _rebuild_fallback_index(self) -> None:
         """Index policy states by coarse features for off-tree obs fallback."""
@@ -39,6 +53,29 @@ class VanillaCFRAgent(Agent):
                 if feature not in self._fallback_index:
                     self._fallback_index[feature] = strat
 
+    def save(self, filepath: str | Path) -> None:
+        """Serialize and save the agent policy to a pickle checkpoint."""
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump(self.policy, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    @classmethod
+    def from_checkpoint(
+        cls,
+        filepath: str | Path,
+        is_canonical: bool = False,
+        seed: int | None = None,
+    ) -> "VanillaCFRAgent":
+        """Load an agent policy from a checkpoint file (or adjacent sqlite db if available)."""
+        path = Path(filepath)
+        db_candidate = path.with_suffix(".db")
+        if db_candidate.is_file():
+            return cls(is_canonical=is_canonical, seed=seed, db_path=db_candidate)
+        with open(path, "rb") as f:
+            policy = pickle.load(f)
+        return cls(policy=policy, is_canonical=is_canonical, seed=seed)
+
     def act_from_state(self, state: GameState) -> Action:
         """Choose an action given the exact GameState."""
         legal_actions = get_legal_actions(state)
@@ -53,7 +90,15 @@ class VanillaCFRAgent(Agent):
         else:
             key = infoset_key(state, player)
 
-        action_probs = self.policy.get(key)
+        action_probs = None
+        if self._conn is not None:
+            k_bytes = pickle.dumps(key, protocol=pickle.HIGHEST_PROTOCOL)
+            row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
+            if row:
+                action_probs = pickle.loads(row[0])
+        elif key in self.policy:
+            action_probs = self.policy[key]
+
         if action_probs:
             return self._sample_action(action_probs, legal_actions)
 
@@ -78,8 +123,17 @@ class VanillaCFRAgent(Agent):
             )
 
         candidate_key = self._reconstruct_candidate_key(obs, mask, hand_key)
-        if candidate_key in self.policy:
-            return self._sample_action(self.policy[candidate_key], legal_actions)
+        action_probs = None
+        if self._conn is not None:
+            k_bytes = pickle.dumps(candidate_key, protocol=pickle.HIGHEST_PROTOCOL)
+            row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
+            if row:
+                action_probs = pickle.loads(row[0])
+        elif candidate_key in self.policy:
+            action_probs = self.policy[candidate_key]
+
+        if action_probs:
+            return self._sample_action(action_probs, legal_actions)
 
         # Check secondary feature index
         pending_e = bool(mask[Action.QUIERO_ENVIDO.value]) if Action.QUIERO_ENVIDO.value < len(mask) else False
