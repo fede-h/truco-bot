@@ -40,14 +40,15 @@ class GameState:
 
 
 def create_initial_hand_state(
-    hands: list[list[Card]],
+    hands: list[list[Card]] | tuple[list[list[Card]], list[Card]],
     mano: int = 0,
     score_p0: int = 0,
     score_p1: int = 0,
     max_score: int = 30,
 ) -> GameState:
+    resolved_hands = hands[0] if isinstance(hands, tuple) else hands
     return GameState(
-        hands=hands,
+        hands=resolved_hands,
         mano=mano,
         active_player=mano,
         score_p0=score_p0,

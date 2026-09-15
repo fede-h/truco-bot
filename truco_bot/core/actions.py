@@ -22,6 +22,7 @@ class Action(IntEnum):
     NO_QUIERO_TRUCO = 24
     IR_AL_MAZO = 25
 
+
 def is_card_action(a: Action) -> bool:
     return 0 <= a.value <= 5
 

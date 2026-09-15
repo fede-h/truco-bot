@@ -11,18 +11,26 @@ def get_standard_deck() -> list[Card]:
     return list(ALL_CARDS)
 
 
-def shuffle(deck: list[Card], seed: int | None = None) -> list[Card]:
-    rng = random.Random(seed) if seed is not None else _DEFAULT_RNG
+def shuffle(
+    deck: list[Card],
+    seed: int | None = None,
+    rng: random.Random | None = None,
+) -> list[Card]:
+    if rng is None:
+        rng = random.Random(seed) if seed is not None else _DEFAULT_RNG
     shuffled = deck.copy()
     rng.shuffle(shuffled)
     return shuffled
 
 
 def deal(
-    num_players: int = 2, cards_per_player: int = 3, seed: int | None = None
+    num_players: int = 2,
+    cards_per_player: int = 3,
+    seed: int | None = None,
+    rng: random.Random | None = None,
 ) -> tuple[list[list[Card]], list[Card]]:
     deck = get_standard_deck()
-    deck = shuffle(deck, seed=seed)
+    deck = shuffle(deck, seed=seed, rng=rng)
 
     hands = []
     for _ in range(num_players):
