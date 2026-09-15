@@ -1,6 +1,7 @@
 import pickle
 import random
 import sqlite3
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 from truco_bot.agents.base import Agent
@@ -9,17 +10,62 @@ from truco_bot.core.state import GameState, get_legal_actions, infoset_key
 from truco_bot.env.obs import ID_TO_CARD
 
 
+class SQLitePolicy(Mapping):
+    """Lightweight zero-RAM read-only mapping backed by an SQLite B-tree policy table."""
+
+    def __init__(self, db_path: str | Path) -> None:
+        self.db_path = str(db_path)
+        self._conn = sqlite3.connect(self.db_path)
+
+    def __getitem__(self, key: tuple) -> dict[Action, float]:
+        k_bytes = pickle.dumps(key, protocol=pickle.HIGHEST_PROTOCOL)
+        row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
+        if row is None:
+            raise KeyError(key)
+        return pickle.loads(row[0])
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, tuple):
+            return False
+        k_bytes = pickle.dumps(key, protocol=pickle.HIGHEST_PROTOCOL)
+        row = self._conn.execute("SELECT 1 FROM policy WHERE k = ?", (k_bytes,)).fetchone()
+        return row is not None
+
+    def __len__(self) -> int:
+        return self._conn.execute("SELECT COUNT(*) FROM policy").fetchone()[0]
+
+    def __iter__(self) -> Iterator[tuple]:
+        for row in self._conn.execute("SELECT k FROM policy"):
+            yield pickle.loads(row[0])
+
+    def get(
+        self, key: tuple, default: dict[Action, float] | None = None
+    ) -> dict[Action, float] | None:
+        k_bytes = pickle.dumps(key, protocol=pickle.HIGHEST_PROTOCOL)
+        row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
+        if row is None:
+            return default
+        return pickle.loads(row[0])
+
+    def close(self) -> None:
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except sqlite3.Error:
+                pass
+
+
 class VanillaCFRAgent(Agent):
     """Agent that chooses actions based on a CFR pre-trained policy table."""
 
     def __init__(
         self,
-        policy: dict[tuple, dict[Action, float]] | None = None,
+        policy: Mapping[tuple, dict[Action, float]] | None = None,
         is_canonical: bool = False,
         seed: int | None = None,
         db_path: str | Path | None = None,
     ) -> None:
-        self.policy: dict[tuple, dict[Action, float]] = policy or {}
+        self.policy: Mapping[tuple, dict[Action, float]] = policy if policy is not None else {}
         self.is_canonical: bool = is_canonical
         self.rng = random.Random(seed)
         self.db_path = str(db_path) if db_path else None
@@ -67,14 +113,29 @@ class VanillaCFRAgent(Agent):
         is_canonical: bool = False,
         seed: int | None = None,
     ) -> "VanillaCFRAgent":
-        """Load an agent policy from a checkpoint file (or adjacent sqlite db if available)."""
+        """Load an agent policy from a checkpoint file (pickle or sqlite)."""
         path = Path(filepath)
-        db_candidate = path.with_suffix(".db")
-        if db_candidate.is_file():
-            return cls(is_canonical=is_canonical, seed=seed, db_path=db_candidate)
+        if not path.is_file():
+            raise FileNotFoundError(f"Checkpoint file not found: {path}")
+
+        if path.suffix in (".db", ".sqlite"):
+            policy = SQLitePolicy(path)
+            return cls(policy=policy, is_canonical=is_canonical, seed=seed, db_path=path)
+
         with open(path, "rb") as f:
             policy = pickle.load(f)
-        return cls(policy=policy, is_canonical=is_canonical, seed=seed)
+        db_candidate = path.with_suffix(".db")
+        if not db_candidate.is_file():
+            db_candidate = path.with_suffix(".sqlite")
+        db_path = db_candidate if db_candidate.is_file() else None
+        return cls(policy=policy, is_canonical=is_canonical, seed=seed, db_path=db_path)
+
+    def _query_policy(self, key: tuple) -> dict[Action, float] | None:
+        if self._conn is not None:
+            k_bytes = pickle.dumps(key, protocol=pickle.HIGHEST_PROTOCOL)
+            row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
+            return pickle.loads(row[0]) if row else None
+        return self.policy.get(key)
 
     def act_from_state(self, state: GameState) -> Action:
         """Choose an action given the exact GameState."""
@@ -90,15 +151,7 @@ class VanillaCFRAgent(Agent):
         else:
             key = infoset_key(state, player)
 
-        action_probs = None
-        if self._conn is not None:
-            k_bytes = pickle.dumps(key, protocol=pickle.HIGHEST_PROTOCOL)
-            row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
-            if row:
-                action_probs = pickle.loads(row[0])
-        elif key in self.policy:
-            action_probs = self.policy[key]
-
+        action_probs = self._query_policy(key)
         if action_probs:
             return self._sample_action(action_probs, legal_actions)
 
@@ -123,15 +176,7 @@ class VanillaCFRAgent(Agent):
             )
 
         candidate_key = self._reconstruct_candidate_key(obs, mask, hand_key)
-        action_probs = None
-        if self._conn is not None:
-            k_bytes = pickle.dumps(candidate_key, protocol=pickle.HIGHEST_PROTOCOL)
-            row = self._conn.execute("SELECT a FROM policy WHERE k = ?", (k_bytes,)).fetchone()
-            if row:
-                action_probs = pickle.loads(row[0])
-        elif candidate_key in self.policy:
-            action_probs = self.policy[candidate_key]
-
+        action_probs = self._query_policy(candidate_key)
         if action_probs:
             return self._sample_action(action_probs, legal_actions)
 
@@ -216,3 +261,17 @@ class VanillaCFRAgent(Agent):
         if sum(weights) > 0.0:
             return self.rng.choices(legal_actions, weights=weights, k=1)[0]
         return self.rng.choice(legal_actions)
+
+
+from truco_bot.agents.cfr.ensemble_agent import EnsembleCFRAgent
+from truco_bot.agents.cfr.fallback import EquityFallback
+from truco_bot.agents.cfr.history import HandHistoryTracker
+
+__all__ = [
+    "EnsembleCFRAgent",
+    "EquityFallback",
+    "HandHistoryTracker",
+    "SQLitePolicy",
+    "VanillaCFRAgent",
+]
+
