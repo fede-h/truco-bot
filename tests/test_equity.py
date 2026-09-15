@@ -1,7 +1,8 @@
 import random
-from truco_bot.core.card import ALL_CARDS
-from truco_bot.core.card import Suit, create_card
+
+from truco_bot.core.card import ALL_CARDS, Suit, create_card
 from truco_bot.core.equity import calculate_envido_equity
+
 
 def test_envido_equity_max_score():
     hand = [

@@ -1,8 +1,10 @@
 import random
+
 from truco_bot.agents.base import Agent
 from truco_bot.core.actions import Action
 from truco_bot.core.rules import calculate_envido
 from truco_bot.env.obs import ID_TO_CARD
+
 
 class HeuristicAgent(Agent):
     def act(self, obs: tuple[int, ...], mask: list[bool]) -> Action:

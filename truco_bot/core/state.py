@@ -40,14 +40,15 @@ class GameState:
 
 
 def create_initial_hand_state(
-    hands: list[list[Card]],
+    hands: list[list[Card]] | tuple[list[list[Card]], list[Card]],
     mano: int = 0,
     score_p0: int = 0,
     score_p1: int = 0,
     max_score: int = 30,
 ) -> GameState:
+    resolved_hands = hands[0] if isinstance(hands, tuple) else hands
     return GameState(
-        hands=hands,
+        hands=resolved_hands,
         mano=mano,
         active_player=mano,
         score_p0=score_p0,
@@ -80,13 +81,12 @@ _TRUCO_RESPONSES_2: list[Action] = [
     Action.QUIERO_TRUCO,
     Action.NO_QUIERO_TRUCO,
     Action.IR_AL_MAZO,
-    Action.RETRUCO,
+    Action.VALE_CUATRO,
 ]
 _TRUCO_RESPONSES_3: list[Action] = [
     Action.QUIERO_TRUCO,
     Action.NO_QUIERO_TRUCO,
     Action.IR_AL_MAZO,
-    Action.VALE_CUATRO,
 ]
 
 
@@ -262,6 +262,8 @@ def step(state: GameState, action: Action) -> GameState:
         new_state.pending_truco_from = other_player
         new_state.truco_caller = player
         new_state.active_player = other_player
+        if action == Action.VALE_CUATRO:
+            new_state.truco_level = 3
         if not new_state.envido_resolved:
             new_state.envido_resolved = True
         return new_state
