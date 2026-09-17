@@ -32,3 +32,12 @@ Thumbs.db
 truco_bot/core/lookup/*.pkl
 truco_bot/agents/cfr/models/*.pkl
 truco_bot/agents/cfr/models/*.db
+
+# MLflow tracking
+mlruns/
+mlruns.db
+
+# Experiments (ignore all YAMLs except showdown_example.yaml)
+experiments/*.yaml
+experiments/*.yml
+!experiments/showdown_example.yaml
