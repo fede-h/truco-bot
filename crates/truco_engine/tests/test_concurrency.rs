@@ -225,3 +225,68 @@ fn test_multi_threaded_throughput_benchmark() {
         "Throughput must exceed 500k ops/sec on multi-threaded stress test"
     );
 }
+
+#[test]
+fn test_get_strategy_average_strategy_and_regret_matching_fallback() {
+    let capacity = 1024;
+    let table = SharedPolicyTable::new(capacity);
+    let key = 0xbeef_cafe_u64;
+    let legal_mask = 0b101; // actions 0 and 2 are legal
+
+    let slot = table.get_or_create(key, legal_mask);
+
+    // 1. Initial state: both strategy_sum and regrets are empty (0.0).
+    // get_strategy falls back from compute_average_strategy (sum <= 1e-6)
+    // to compute_regret_matching, which yields uniform over legal actions.
+    let initial_strat = table.get_strategy(key, legal_mask);
+    assert!((initial_strat[0] - 0.5).abs() < 1e-6);
+    assert_eq!(initial_strat[1], 0.0);
+    assert!((initial_strat[2] - 0.5).abs() < 1e-6);
+
+    // 2. Regrets are accumulated, but strategy_sum is still empty.
+    // slot.update_regret for action 0: 3.0, action 2: 1.0.
+    slot.update_regret(0, 3.0, false);
+    slot.update_regret(2, 1.0, false);
+
+    // compute_average_strategy must return false because strategy_sum is empty.
+    let mut out_avg = [0.0f32; 8];
+    assert!(!slot.compute_average_strategy(legal_mask, &mut out_avg));
+
+    // get_strategy must fall back to regret matching:
+    // action 0: 3.0 / 4.0 = 0.75, action 2: 1.0 / 4.0 = 0.25.
+    let regret_strat = table.get_strategy(key, legal_mask);
+    assert!((regret_strat[0] - 0.75).abs() < 1e-6);
+    assert_eq!(regret_strat[1], 0.0);
+    assert!((regret_strat[2] - 0.25).abs() < 1e-6);
+
+    // 3. Strategy is accumulated (average strategy).
+    // We accumulate strategy: action 0 with prob 0.2, weight 10.0 (sum = 2.0);
+    // action 2 with prob 0.8, weight 10.0 (sum = 8.0).
+    // Total legal sum = 10.0 > 1e-6.
+    slot.accumulate_strategy(0, 0.2, 10.0);
+    slot.accumulate_strategy(2, 0.8, 10.0);
+
+    // Direct check of compute_average_strategy
+    assert!(slot.compute_average_strategy(legal_mask, &mut out_avg));
+    assert!((out_avg[0] - 0.2).abs() < 1e-6);
+    assert_eq!(out_avg[1], 0.0);
+    assert!((out_avg[2] - 0.8).abs() < 1e-6);
+    assert!((out_avg[0] + out_avg[2] - 1.0).abs() < 1e-6);
+
+    // get_strategy must return the normalized average strategy (0.2, 0.8),
+    // NOT the regret matching (0.75, 0.25).
+    let avg_strat = table.get_strategy(key, legal_mask);
+    assert!((avg_strat[0] - 0.2).abs() < 1e-6);
+    assert_eq!(avg_strat[1], 0.0);
+    assert!((avg_strat[2] - 0.8).abs() < 1e-6);
+    assert!((avg_strat[0] + avg_strat[2] - 1.0).abs() < 1e-6);
+
+    // 4. Test with a legal mask where legal actions have no strategy_sum.
+    // Suppose legal_mask is 0b010 (only action 1 is legal), but action 1 has no strategy_sum.
+    let legal_mask_1 = 0b010;
+    let mut out_mask1 = [0.0f32; 8];
+    assert!(!slot.compute_average_strategy(legal_mask_1, &mut out_mask1));
+    let strat_mask1 = table.get_strategy(key, legal_mask_1);
+    assert!((strat_mask1[1] - 1.0).abs() < 1e-6);
+}
+

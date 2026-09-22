@@ -112,6 +112,31 @@ impl InfosetSlot {
             }
         }
     }
+
+    pub fn compute_average_strategy(&self, legal_mask: u32, out: &mut [f32]) -> bool {
+        let mut sum = 0.0f32;
+        for a in 0..8 {
+            if (legal_mask & (1 << a)) != 0 {
+                let s = self.strategy_sum[a].load(Ordering::Relaxed).max(0.0);
+                out[a] = s;
+                sum += s;
+            } else {
+                out[a] = 0.0;
+            }
+        }
+
+        if sum > 1e-6 {
+            let inv = 1.0 / sum;
+            for a in 0..8 {
+                if (legal_mask & (1 << a)) != 0 {
+                    out[a] *= inv;
+                }
+            }
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub struct SharedPolicyTable {
@@ -180,7 +205,9 @@ impl SharedPolicyTable {
             let cur = slot.key.load(Ordering::Acquire);
             if cur == key {
                 let mut out = [0.0f32; 8];
-                slot.compute_regret_matching(legal_mask, &mut out);
+                if !slot.compute_average_strategy(legal_mask, &mut out) {
+                    slot.compute_regret_matching(legal_mask, &mut out);
+                }
                 return out;
             }
             if cur == EMPTY_KEY {
