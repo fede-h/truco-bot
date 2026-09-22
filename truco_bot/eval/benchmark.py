@@ -19,10 +19,11 @@ def _find_checkpoint(agent_name: str, checkpoint_path: str | Path | None) -> Pat
     if checkpoint_path is not None:
         p = Path(checkpoint_path)
         return p if p.is_file() else None
-    for ext in (".db", ".sqlite", ".pkl"):
-        candidate = Path(f"truco_bot/agents/cfr/models/{agent_name}{ext}")
-        if candidate.is_file():
-            return candidate
+    for folder in ("models", "truco_bot/agents/cfr/models"):
+        for ext in (".bin", ".db", ".sqlite", ".pkl"):
+            candidate = Path(f"{folder}/{agent_name}{ext}")
+            if candidate.is_file():
+                return candidate
     return None
 
 
@@ -32,12 +33,22 @@ def load_agent(
     seed: int | None = None,
 ) -> Agent:
     """Load an agent by name, optionally restoring from a checkpoint."""
+
     if agent_name == "random":
         return RandomAgent(seed=seed)
     elif agent_name == "heuristic":
         return HeuristicAgent()
     elif agent_name == "equity":
         return EquityAgent()
+    elif agent_name.startswith(("mccfr_native", "native_cfr", "mccfr_checkpoint", "native")):
+        from truco_bot.agents.cfr.native_agent import NativeCFRAgent
+
+        path = _find_checkpoint(agent_name, checkpoint_path)
+        if path is not None:
+            return NativeCFRAgent.from_checkpoint(path, seed=seed)
+        if agent_name in ("mccfr_native", "native_cfr", "native"):
+            return NativeCFRAgent(seed=seed)
+        raise ValueError(f"Unknown agent or missing checkpoint: {agent_name}")
     elif agent_name.startswith(("mccfr_ensemble", "ensemble_cfr")):
         from truco_bot.agents.cfr.ensemble_agent import EnsembleCFRAgent
 

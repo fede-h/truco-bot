@@ -161,3 +161,57 @@ def test_native_state_transition_throughput():
     rate = iterations / elapsed
     print(f"\nNative step throughput: {rate:,.0f} steps/sec")
     assert rate > 200_000, f"Expected > 200,000 steps/sec via Python FFI, got {rate:,.0f}"
+
+
+def test_native_cfr_agent_act_from_state():
+    """Verify NativeCFRAgent can choose actions directly from GameState."""
+    from truco_bot.agents.cfr.native_agent import NativeCFRAgent
+    from truco_bot.env.engine import TrucoHandEnv
+
+    agent = NativeCFRAgent(capacity=1024, seed=42)
+    env = TrucoHandEnv()
+    state, _ = env.reset(seed=42)
+
+    action = agent.act_from_state(state)
+    legal = get_legal_actions(state)
+    assert action in legal
+
+
+def test_native_cfr_agent_act_obs_mask():
+    """Verify NativeCFRAgent can choose actions from Gym observation and mask."""
+    from truco_bot.agents.cfr.native_agent import NativeCFRAgent
+    from truco_bot.env.engine import TrucoHandEnv
+
+    agent = NativeCFRAgent(capacity=1024, seed=42)
+    env = TrucoHandEnv()
+    state, mask = env.reset(seed=42)
+    obs = env.get_obs(state.active_player)
+
+    action = agent.act(obs, mask)
+    legal_actions = [Action(i) for i, is_legal in enumerate(mask) if is_legal]
+    assert action in legal_actions
+
+
+def test_native_cfr_agent_duplicate_match():
+    """Verify NativeCFRAgent plays complete duplicate match in arena without exception."""
+    from truco_bot.agents.baselines.heuristic import HeuristicAgent
+    from truco_bot.agents.cfr.native_agent import NativeCFRAgent
+    from truco_bot.env.engine import TrucoHandEnv
+    from truco_bot.eval.arena import play_duplicate_match
+
+    agent = NativeCFRAgent(capacity=1024, seed=42)
+    opponent = HeuristicAgent()
+    env = TrucoHandEnv()
+
+    delta = play_duplicate_match(agent, opponent, env, seed=42)
+    assert isinstance(delta, int)
+
+
+def test_benchmark_load_native_agent():
+    """Verify benchmark load_agent loads NativeCFRAgent by name and checkpoint."""
+    from truco_bot.agents.cfr.native_agent import NativeCFRAgent
+    from truco_bot.eval.benchmark import load_agent
+
+    agent = load_agent("native", seed=42)
+    assert isinstance(agent, NativeCFRAgent)
+

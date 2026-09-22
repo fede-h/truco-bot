@@ -14,6 +14,7 @@ from truco_bot.agents.cfr.isomorphism import (
     generate_canonical_deals,
 )
 from truco_bot.agents.cfr.mccfr_solver import ExternalSamplingMCCFRSolver
+from truco_bot.agents.cfr.native_agent import NativeCFRAgent
 from truco_bot.agents.cfr.node import CFRNode
 from truco_bot.agents.cfr.train import train_and_save
 from truco_bot.agents.cfr.traversal import cfr_traverse
@@ -27,6 +28,7 @@ __all__ = [
     "EquityFallback",
     "ExternalSamplingMCCFRSolver",
     "HandHistoryTracker",
+    "NativeCFRAgent",
     "VanillaCFRAgent",
     "canonical_deal_partitions",
     "canonical_infoset_key",

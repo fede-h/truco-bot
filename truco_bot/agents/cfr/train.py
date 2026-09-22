@@ -17,6 +17,16 @@ def train_and_save(
     log_interval: int | None = None,
 ) -> str:
     """Train a CFR solver and save the resulting policy table to disk."""
+    if variant in ("native", "mccfr_native", "rust"):
+        import truco_engine
+
+        table = truco_engine.SharedPolicyTable(67_108_864)
+        target_path = Path(output_path or f"models/mccfr_checkpoint_{iterations}.bin")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        truco_engine.train_parallel(table, iterations, threads=4, cfr_plus=True)
+        table.save_to_file(str(target_path))
+        return str(target_path)
+
     if variant == "chance":
         solver = ChanceSampledCFRSolver(seed=seed)
         default_ext = "pkl"
@@ -56,7 +66,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train and save CFR policy models")
     parser.add_argument(
         "--variant",
-        choices=["chance", "canonical", "mccfr", "mccfr_canonical", "mccfr_chance"],
+        choices=["chance", "canonical", "mccfr", "mccfr_canonical", "mccfr_chance", "native", "mccfr_native"],
         default="mccfr_canonical",
         help="CFR solver variant",
     )

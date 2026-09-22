@@ -223,5 +223,27 @@ impl SharedPolicyTable {
         file.flush()?;
         Ok(count)
     }
+
+    pub fn load_from_file(&self, path: &str) -> std::io::Result<usize> {
+        use std::io::Read;
+        let mut file = std::io::BufReader::new(std::fs::File::open(path)?);
+        let mut count = 0usize;
+        let mut buf = [0u8; 76];
+        while file.read_exact(&mut buf).is_ok() {
+            let key = u64::from_le_bytes(buf[0..8].try_into().unwrap());
+            let mask = u32::from_le_bytes(buf[8..12].try_into().unwrap());
+            let slot = self.get_or_create(key, mask);
+            for i in 0..8 {
+                let r = f32::from_le_bytes(buf[12 + i * 4..16 + i * 4].try_into().unwrap());
+                slot.regrets[i].store(r, Ordering::Relaxed);
+            }
+            for i in 0..8 {
+                let s = f32::from_le_bytes(buf[44 + i * 4..48 + i * 4].try_into().unwrap());
+                slot.strategy_sum[i].store(s, Ordering::Relaxed);
+            }
+            count += 1;
+        }
+        Ok(count)
+    }
 }
 

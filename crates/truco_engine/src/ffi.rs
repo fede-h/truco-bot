@@ -33,6 +33,98 @@ impl PyBitboardState {
         Ok(PyBitboardState(BitboardState::new(h, mano)))
     }
 
+    #[staticmethod]
+    #[pyo3(signature = (
+        hands,
+        trick_cards,
+        trick_results,
+        trick_leader,
+        current_trick,
+        active_player,
+        mano,
+        score_p0,
+        score_p1,
+        max_score,
+        envido_chain,
+        pending_envido_from,
+        truco_level,
+        truco_caller,
+        pending_truco_from,
+        flags,
+        winner,
+        points_won
+    ))]
+    pub fn from_components(
+        hands: Vec<Vec<u8>>,
+        trick_cards: Vec<u8>,
+        trick_results: Vec<i8>,
+        trick_leader: u8,
+        current_trick: u8,
+        active_player: u8,
+        mano: u8,
+        score_p0: u8,
+        score_p1: u8,
+        max_score: u8,
+        envido_chain: Vec<u8>,
+        pending_envido_from: u8,
+        truco_level: u8,
+        truco_caller: u8,
+        pending_truco_from: u8,
+        flags: u8,
+        winner: u8,
+        points_won: u8,
+    ) -> Self {
+        let mut h = [[255u8; 3]; 2];
+        for p in 0..2 {
+            if p < hands.len() {
+                for i in 0..3 {
+                    if i < hands[p].len() {
+                        h[p][i] = hands[p][i];
+                    }
+                }
+            }
+        }
+        let mut tc = [255u8; 2];
+        for i in 0..2 {
+            if i < trick_cards.len() {
+                tc[i] = trick_cards[i];
+            }
+        }
+        let mut tr = [127i8; 3];
+        for i in 0..3 {
+            if i < trick_results.len() {
+                tr[i] = trick_results[i];
+            }
+        }
+        let mut ec = [255u8; 6];
+        let elen = envido_chain.len().min(6) as u8;
+        for i in 0..(elen as usize) {
+            ec[i] = envido_chain[i];
+        }
+
+        PyBitboardState(BitboardState {
+            hands: h,
+            trick_cards: tc,
+            trick_results: tr,
+            trick_leader,
+            current_trick,
+            active_player,
+            mano,
+            score_p0,
+            score_p1,
+            max_score,
+            envido_chain: ec,
+            envido_chain_len: elen,
+            pending_envido_from,
+            truco_level,
+            truco_caller,
+            pending_truco_from,
+            flags,
+            winner,
+            points_won,
+        })
+    }
+
     #[getter]
     pub fn active_player(&self) -> u8 {
         self.0.active_player()
@@ -127,6 +219,12 @@ impl PySharedPolicyTable {
             pyo3::exceptions::PyIOError::new_err(format!("Failed to save policy: {e}"))
         })
     }
+
+    pub fn load_from_file(&self, path: &str) -> PyResult<usize> {
+        self.inner.load_from_file(path).map_err(|e| {
+            pyo3::exceptions::PyIOError::new_err(format!("Failed to load policy: {e}"))
+        })
+    }
 }
 
 #[pyfunction]
@@ -166,6 +264,33 @@ pub fn train_parallel(
     });
 }
 
+#[pyfunction]
+pub fn get_policy_distribution(
+    bstate: &PyBitboardState,
+    table: &PySharedPolicyTable,
+) -> Vec<(u8, f32)> {
+    let mask = bstate.0.legal_actions_mask();
+    if mask == 0 {
+        return vec![];
+    }
+    let mut actions = [0u8; 8];
+    let mut num_actions = 0;
+    for a in 0..26u8 {
+        if (mask & (1 << a)) != 0 && num_actions < 8 {
+            actions[num_actions] = a;
+            num_actions += 1;
+        }
+    }
+    let key = bstate.0.canonical_infoset_key(bstate.0.active_player());
+    let legal_submask = (1u32 << num_actions) - 1;
+    let strat = table.inner.get_strategy(key, legal_submask);
+    let mut out = Vec::with_capacity(num_actions);
+    for i in 0..num_actions {
+        out.push((actions[i], strat[i]));
+    }
+    out
+}
+
 pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBitboardState>()?;
     m.add_class::<PySharedPolicyTable>()?;
@@ -174,5 +299,6 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resolve_hand, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_falta_envido_points, m)?)?;
     m.add_function(wrap_pyfunction!(train_parallel, m)?)?;
+    m.add_function(wrap_pyfunction!(get_policy_distribution, m)?)?;
     Ok(())
 }
