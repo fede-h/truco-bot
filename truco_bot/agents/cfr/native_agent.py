@@ -6,7 +6,9 @@ from pathlib import Path
 
 import truco_engine
 from truco_engine import BitboardState, SharedPolicyTable, get_policy_distribution
-from truco_bot.agents.cfr.ensemble_agent import EnsembleCFRAgent
+from truco_bot.agents.base import Agent
+from truco_bot.agents.cfr.fallback import EquityFallback
+from truco_bot.agents.cfr.history import HandHistoryTracker
 from truco_bot.core.actions import Action
 from truco_bot.core.card import Card
 from truco_bot.core.state import GameState, get_legal_actions
@@ -77,7 +79,7 @@ def gamestate_to_bitboard(state: GameState) -> BitboardState:
     )
 
 
-class NativeCFRAgent(EnsembleCFRAgent):
+class NativeCFRAgent(Agent):
     """High-performance CFR agent evaluating policies directly from native SharedPolicyTable."""
 
     def __init__(
@@ -87,8 +89,10 @@ class NativeCFRAgent(EnsembleCFRAgent):
         model_path: str | Path | None = None,
         capacity: int = 67_108_864,
     ) -> None:
-        super().__init__(policy={}, is_canonical=True, seed=seed)
         self.capacity = capacity
+        self.rng = random.Random(seed)
+        self.tracker = HandHistoryTracker()
+        self.fallback = EquityFallback()
         if table is not None:
             self.table = table
         elif model_path is not None:
@@ -96,6 +100,10 @@ class NativeCFRAgent(EnsembleCFRAgent):
             self.table.load_from_file(str(model_path))
         else:
             self.table = SharedPolicyTable(capacity)
+
+    def reset(self) -> None:
+        """Reset internal history tracker for a new hand."""
+        self.tracker.reset_hand()
 
     @classmethod
     def from_checkpoint(
