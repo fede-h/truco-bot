@@ -16,9 +16,7 @@ def main() -> None:
         "random",
         "heuristic",
         "equity",
-        "cfr_canonical_20",
-        "cfr_canonical_1000",
-        "mccfr_canonical_10k",
+        "native",
     ]
 
     agents = {}

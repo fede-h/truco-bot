@@ -10,7 +10,6 @@ from truco_bot.agents.base import Agent
 from truco_bot.agents.baselines.equity import EquityAgent
 from truco_bot.agents.baselines.heuristic import HeuristicAgent
 from truco_bot.agents.baselines.random import RandomAgent
-from truco_bot.agents.cfr.agent import VanillaCFRAgent
 from truco_bot.env.engine import TrucoHandEnv
 from truco_bot.eval.arena import play_duplicate_match
 
@@ -19,8 +18,8 @@ def _find_checkpoint(agent_name: str, checkpoint_path: str | Path | None) -> Pat
     if checkpoint_path is not None:
         p = Path(checkpoint_path)
         return p if p.is_file() else None
-    for folder in ("models", "truco_bot/agents/cfr/models"):
-        for ext in (".bin", ".db", ".sqlite", ".pkl"):
+    for folder in ("models",):
+        for ext in (".bin",):
             candidate = Path(f"{folder}/{agent_name}{ext}")
             if candidate.is_file():
                 return candidate
@@ -48,23 +47,6 @@ def load_agent(
             return NativeCFRAgent.from_checkpoint(path, seed=seed)
         if agent_name in ("mccfr_native", "native_cfr", "native"):
             return NativeCFRAgent(seed=seed)
-        raise ValueError(f"Unknown agent or missing checkpoint: {agent_name}")
-    elif agent_name.startswith(("mccfr_ensemble", "ensemble_cfr")):
-        from truco_bot.agents.cfr.ensemble_agent import EnsembleCFRAgent
-
-        path = _find_checkpoint(agent_name, checkpoint_path)
-        if path is not None:
-            return EnsembleCFRAgent.from_checkpoint(path, is_canonical=True, seed=seed)
-        if agent_name in ("mccfr_ensemble", "ensemble_cfr"):
-            return EnsembleCFRAgent(seed=seed, is_canonical=True)
-        raise ValueError(f"Unknown agent or missing checkpoint: {agent_name}")
-    elif agent_name.startswith(("cfr_chance", "cfr_canonical", "mccfr_chance", "mccfr_canonical")):
-        is_canonical = "canonical" in agent_name
-        path = _find_checkpoint(agent_name, checkpoint_path)
-        if path is not None:
-            return VanillaCFRAgent.from_checkpoint(path, is_canonical=is_canonical, seed=seed)
-        if agent_name in ("cfr_chance", "cfr_canonical", "mccfr_chance", "mccfr_canonical"):
-            return VanillaCFRAgent(seed=seed, is_canonical=is_canonical)
         raise ValueError(f"Unknown agent or missing checkpoint: {agent_name}")
     else:
         raise ValueError(f"Unknown agent: {agent_name}")

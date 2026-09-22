@@ -8,7 +8,7 @@ from truco_bot.agents.base import Agent
 from truco_bot.agents.baselines.equity import EquityAgent
 from truco_bot.agents.baselines.heuristic import HeuristicAgent
 from truco_bot.agents.baselines.random import RandomAgent
-from truco_bot.agents.cfr.agent import VanillaCFRAgent
+from truco_bot.agents.cfr.native_agent import NativeCFRAgent
 from truco_bot.eval.benchmark import load_agent, run_tournament
 
 
@@ -27,17 +27,11 @@ def test_load_agent_baselines() -> None:
     assert isinstance(agent_equity, EquityAgent)
 
 
-def test_load_agent_cfr_variants() -> None:
-    """Verify load_agent instantiates CFR agents with appropriate canonical flags."""
-    agent_chance = load_agent("cfr_chance")
-    assert isinstance(agent_chance, Agent)
-    assert isinstance(agent_chance, VanillaCFRAgent)
-    assert agent_chance.is_canonical is False
-
-    agent_canonical = load_agent("cfr_canonical")
-    assert isinstance(agent_canonical, Agent)
-    assert isinstance(agent_canonical, VanillaCFRAgent)
-    assert agent_canonical.is_canonical is True
+def test_load_agent_native() -> None:
+    """Verify load_agent instantiates NativeCFRAgent for native variants."""
+    agent_native = load_agent("native")
+    assert isinstance(agent_native, Agent)
+    assert isinstance(agent_native, NativeCFRAgent)
 
 
 def test_load_agent_unknown() -> None:
@@ -121,9 +115,9 @@ def test_run_tournament_multi_agent_round_robin() -> None:
     assert total_wins == total_losses, f"Wins ({total_wins}) != Losses ({total_losses})"
 
 
-def test_run_tournament_with_vanilla_cfr_agent() -> None:
-    """Verify run_tournament successfully executes matches with VanillaCFRAgent."""
-    cfr_agent = VanillaCFRAgent(policy={}, is_canonical=False, seed=42)
+def test_run_tournament_with_native_cfr_agent() -> None:
+    """Verify run_tournament successfully executes matches with NativeCFRAgent."""
+    cfr_agent = NativeCFRAgent(capacity=1024, seed=42)
 
     agents = {
         "cfr": cfr_agent,
