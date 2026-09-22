@@ -22,16 +22,21 @@ htmlcov/
 # Build and distribution
 build/
 dist/
+target/
 *.egg-info/
+*.so
+mlflow.db
 
 # Operating system files
 .DS_Store
 Thumbs.db
 
-# Precomputed caches
+# Precomputed caches & binary models
 truco_bot/core/lookup/*.pkl
 truco_bot/agents/cfr/models/*.pkl
 truco_bot/agents/cfr/models/*.db
+models/
+*.bin
 
 # MLflow tracking
 mlruns/

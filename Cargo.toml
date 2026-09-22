@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/truco_engine",
+]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
