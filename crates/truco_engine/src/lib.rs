@@ -5,6 +5,7 @@ pub mod mccfr;
 pub mod rules;
 pub mod state;
 pub mod table;
+pub mod cfr;
 
 #[cfg(feature = "pyo3")]
 pub mod ffi;

@@ -291,6 +291,21 @@ pub fn get_policy_distribution(
     out
 }
 
+#[pyfunction]
+#[pyo3(signature = (table, iterations, threads=4, cfr_plus=true))]
+pub fn train_cfr_parallel(
+    py: Python<'_>,
+    table: &PySharedPolicyTable,
+    iterations: usize,
+    threads: usize,
+    cfr_plus: bool,
+) {
+    let inner = Arc::clone(&table.inner);
+    py.allow_threads(move || {
+        crate::cfr::train_cfr_parallel(inner, iterations, threads, cfr_plus);
+    });
+}
+
 pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBitboardState>()?;
     m.add_class::<PySharedPolicyTable>()?;
@@ -299,6 +314,7 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resolve_hand, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_falta_envido_points, m)?)?;
     m.add_function(wrap_pyfunction!(train_parallel, m)?)?;
+    m.add_function(wrap_pyfunction!(train_cfr_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(get_policy_distribution, m)?)?;
     Ok(())
 }

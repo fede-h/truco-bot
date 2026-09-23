@@ -142,6 +142,14 @@ def test_train_and_save_native(tmp_path: Path) -> None:
     assert Path(result_path).stat().st_size > 0
 
 
+def test_train_and_save_cfr(tmp_path: Path) -> None:
+    """Verify train_and_save produces a valid .bin native checkpoint using CFR."""
+    output_path = tmp_path / "trained_cfr.bin"
+    result_path = train_and_save(iterations=10, output_path=output_path, algorithm="cfr")
+    assert Path(result_path).exists()
+    assert Path(result_path).stat().st_size > 0
+
+
 def test_from_checkpoint_nonexistent_file() -> None:
     """Verify from_checkpoint raises FileNotFoundError if file does not exist."""
     with pytest.raises(FileNotFoundError):

@@ -437,8 +437,6 @@ impl BitboardState {
         feed!(self.mano);
 
         feed!(self.flags);
-        feed!(self.score_p0);
-        feed!(self.score_p1);
         feed!(self.pending_envido_from);
         feed!(self.envido_chain_len);
         for i in 0..(self.envido_chain_len as usize).min(6) {

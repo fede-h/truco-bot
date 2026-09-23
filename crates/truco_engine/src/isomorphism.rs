@@ -1,9 +1,44 @@
 //! Suit isomorphism normalizer and canonical 64-bit infoset hash.
 //! Compresses all 9,880 3-card hands to exactly 1,812 canonical equivalence classes.
 
+use std::sync::OnceLock;
+
 use crate::card::{card_number, CARD_ENVIDO, CARD_RANKS, CARD_SUITS};
 
+// ponytail: 202 KB static lookup table permanently cached in L2 CPU cache
+static CANONICAL_HAND_TABLE: OnceLock<Box<[[u8; 3]]>> = OnceLock::new();
+
+fn get_canonical_table() -> &'static [[u8; 3]] {
+    CANONICAL_HAND_TABLE.get_or_init(|| {
+        let mut table = vec![[255u8; 3]; 41 * 41 * 41].into_boxed_slice();
+        for c0 in 0..=40 {
+            for c1 in 0..=40 {
+                for c2 in 0..=40 {
+                    let mut hand = [0u8; 3];
+                    let mut len = 0;
+                    for &c in &[c0, c1, c2] {
+                        if c < 40 {
+                            hand[len] = c as u8;
+                            len += 1;
+                        }
+                    }
+                    let idx = c0 * 41 * 41 + c1 * 41 + c2;
+                    table[idx] = compute_canonicalize_hand(&hand[..len]);
+                }
+            }
+        }
+        table
+    })
+}
+
 pub fn canonicalize_hand(hand: &[u8]) -> [u8; 3] {
+    let [c0, c1, c2] = [0, 1, 2].map(|i| {
+        hand.get(i).copied().filter(|&c| c < 40).unwrap_or(40) as usize
+    });
+    get_canonical_table()[c0 * 41 * 41 + c1 * 41 + c2]
+}
+
+fn compute_canonicalize_hand(hand: &[u8]) -> [u8; 3] {
     if hand.is_empty() {
         return [255, 255, 255];
     }
