@@ -4,8 +4,6 @@ from truco_bot.agents.base import Agent
 from truco_bot.agents.baselines.heuristic import HeuristicAgent
 from truco_bot.agents.baselines.random import RandomAgent
 from truco_bot.agents.cfr.agent import VanillaCFRAgent
-from truco_bot.agents.cfr.canonical_solver import CanonicalCFRSolver
-from truco_bot.agents.cfr.chance_sampled_solver import ChanceSampledCFRSolver
 from truco_bot.core.actions import Action
 from truco_bot.core.card import ALL_CARDS
 from truco_bot.core.state import create_initial_hand_state
@@ -45,13 +43,8 @@ def test_vanilla_cfr_agent_act_from_state():
 
 def test_vanilla_cfr_agent_arena_head_to_head():
     """Verify Chance-Sampled and Canonical agents execute head-to-head duplicate matches."""
-    solver_a = ChanceSampledCFRSolver(seed=42)
-    solver_a.train(iterations=1)
-    agent_a = VanillaCFRAgent(policy=solver_a.export_policy(), is_canonical=False, seed=42)
-
-    solver_b = CanonicalCFRSolver()
-    solver_b.train(iterations=1)
-    agent_b = VanillaCFRAgent(policy=solver_b.export_policy(), is_canonical=True, seed=42)
+    agent_a = VanillaCFRAgent(policy={}, is_canonical=False, seed=42)
+    agent_b = VanillaCFRAgent(policy={}, is_canonical=True, seed=42)
 
     env = TrucoHandEnv()
     # Direct single match verification

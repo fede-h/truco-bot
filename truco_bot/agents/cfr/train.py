@@ -1,96 +1,94 @@
 """Training pipeline and serialization for CFR agents."""
 
 import argparse
-import pickle
+import os
+import time
 from pathlib import Path
 
-from truco_bot.agents.cfr.canonical_solver import CanonicalCFRSolver
-from truco_bot.agents.cfr.chance_sampled_solver import ChanceSampledCFRSolver
-from truco_bot.agents.cfr.mccfr_solver import ExternalSamplingMCCFRSolver
+import truco_engine
+
+# fixed 64M slots (about 4.86 GB RAM)
+TABLE_CAPACITY = 67_108_864
 
 
 def train_and_save(
-    variant: str = "chance",
-    iterations: int = 1000,
+    iterations: int = 25_000_000,
     output_path: str | Path | None = None,
-    seed: int = 42,
-    log_interval: int | None = None,
+    threads: int | None = None,
+    algorithm: str = "mccfr",
+    cfr_plus: bool = True,
+    **kwargs,
 ) -> str:
-    """Train a CFR solver and save the resulting policy table to disk."""
-    if variant == "chance":
-        solver = ChanceSampledCFRSolver(seed=seed)
-        default_ext = "pkl"
-    elif variant == "canonical":
-        solver = CanonicalCFRSolver()
-        default_ext = "pkl"
-    elif variant in ("mccfr", "mccfr_canonical"):
-        solver = ExternalSamplingMCCFRSolver(seed=seed, is_canonical=True, cfr_plus=True)
-        default_ext = "db"
-    elif variant == "mccfr_chance":
-        solver = ExternalSamplingMCCFRSolver(seed=seed, is_canonical=False, cfr_plus=True)
-        default_ext = "db"
+    """Train native CFR solver and save policy table to disk."""
+    algo_key = algorithm.lower()
+    if algo_key not in ("mccfr", "cfr"):
+        raise ValueError(f"Unknown algorithm: {algorithm}. Must be 'mccfr' or 'cfr'.")
+
+    if output_path is not None:
+        target_path = Path(output_path)
     else:
-        raise ValueError(f"Unknown CFR variant: {variant}")
-
-    try:
-        solver.train(iterations=iterations, log_interval=log_interval)
-    except TypeError:
-        solver.train(iterations=iterations)
-
-    target_path = Path(
-        output_path or f"truco_bot/agents/cfr/models/{variant}_{iterations}.{default_ext}"
-    )
+        suffix = f"{iterations // 1_000_000}M" if iterations >= 1_000_000 else f"{iterations}"
+        target_path = Path(f"models/{algo_key}_checkpoint_{suffix}.bin")
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if target_path.suffix in (".db", ".sqlite") and hasattr(solver, "export_to_sqlite"):
-        solver.export_to_sqlite(target_path)
-    else:
-        policy = solver.export_policy()
-        with open(target_path, "wb") as f:
-            pickle.dump(policy, f, protocol=pickle.HIGHEST_PROTOCOL)
+    worker_threads = threads or max(1, os.cpu_count() or 4)
+    table = truco_engine.SharedPolicyTable(TABLE_CAPACITY)
 
+    t0 = time.perf_counter()
+    train_fn = truco_engine.train_cfr_parallel if algo_key == "cfr" else truco_engine.train_parallel
+    train_fn(table, iterations, threads=worker_threads, cfr_plus=cfr_plus)
+    dt = time.perf_counter() - t0
+
+    table.save_to_file(str(target_path))
+    speed = iterations / dt if dt > 0 else 0.0
+    print(
+        f"Trained [{algo_key.upper()}] {iterations:,} deals in {dt:.2f}s ({speed:,.0f} deals/s) | "
+        f"Occupied: {table.count_occupied():,} infosets"
+    )
     return str(target_path)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train and save CFR policy models")
+    parser = argparse.ArgumentParser(description="Train native CFR policy models")
     parser.add_argument(
-        "--variant",
-        choices=["chance", "canonical", "mccfr", "mccfr_canonical", "mccfr_chance"],
-        default="mccfr_canonical",
-        help="CFR solver variant",
+        "--algorithm",
+        type=str,
+        choices=["mccfr", "cfr"],
+        default="mccfr",
+        help="CFR solver algorithm ('mccfr' for External-Sampling MCCFR, 'cfr' for Chance-Sampled CFR)",
     )
     parser.add_argument(
         "--iterations",
         type=int,
-        default=1000,
-        help="Number of training iterations",
+        default=25_000_000,
+        help="Total training iterations",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=None,
+        help="Worker threads (defaults to CPU count)",
     )
     parser.add_argument(
         "--output",
         type=str,
         default=None,
-        help="Custom output file path for the checkpoint",
+        help="Output file path",
     )
     parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed for ChanceSampled solver",
-    )
-    parser.add_argument(
-        "--log-interval",
-        type=int,
-        default=None,
-        help="Interval for progress logging",
+        "--cfr-plus",
+        dest="cfr_plus",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use CFR+ non-negative regret floor",
     )
     args = parser.parse_args()
 
     saved_path = train_and_save(
-        variant=args.variant,
         iterations=args.iterations,
+        threads=args.threads,
         output_path=args.output,
-        seed=args.seed,
-        log_interval=args.log_interval,
+        algorithm=args.algorithm,
+        cfr_plus=args.cfr_plus,
     )
     print(f"Policy saved to {saved_path}")

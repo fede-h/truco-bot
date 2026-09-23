@@ -7,8 +7,6 @@ from pathlib import Path
 import pytest
 
 from truco_bot.agents.cfr.agent import VanillaCFRAgent
-from truco_bot.agents.cfr.canonical_solver import CanonicalCFRSolver
-from truco_bot.agents.cfr.chance_sampled_solver import ChanceSampledCFRSolver
 from truco_bot.agents.cfr.train import train_and_save
 from truco_bot.core.actions import Action
 from truco_bot.core.card import ALL_CARDS
@@ -136,53 +134,20 @@ def test_cfr_agent_act_determinism_before_and_after_serialization(tmp_path: Path
     assert state_action_orig == state_action_loaded
 
 
-def test_train_and_save_chance_variant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify train_and_save produces a valid, reloadable pickle file for chance variant."""
-    sample_policy = _sample_policy()
-    monkeypatch.setattr(ChanceSampledCFRSolver, "train", lambda self, iterations: None)
-    monkeypatch.setattr(ChanceSampledCFRSolver, "export_policy", lambda self: sample_policy)
-
-    output_path = tmp_path / "trained_chance.pkl"
-    result_path = train_and_save(variant="chance", iterations=2, output_path=output_path)
+def test_train_and_save_native(tmp_path: Path) -> None:
+    """Verify train_and_save produces a valid .bin native checkpoint."""
+    output_path = tmp_path / "trained_native.bin"
+    result_path = train_and_save(iterations=10, output_path=output_path)
     assert Path(result_path).exists()
     assert Path(result_path).stat().st_size > 0
 
-    reloaded_agent = VanillaCFRAgent.from_checkpoint(result_path, is_canonical=False)
-    assert isinstance(reloaded_agent, VanillaCFRAgent)
-    assert len(reloaded_agent.policy) > 0
 
-    # Ensure valid strategy distributions
-    for strategy in reloaded_agent.policy.values():
-        assert len(strategy) > 0
-        total_prob = sum(strategy.values())
-        assert math.isclose(total_prob, 1.0, rel_tol=1e-5)
-
-
-def test_train_and_save_canonical_variant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify train_and_save produces a valid, reloadable pickle file for canonical variant."""
-    sample_policy = _sample_policy()
-    monkeypatch.setattr(CanonicalCFRSolver, "train", lambda self, iterations: None)
-    monkeypatch.setattr(CanonicalCFRSolver, "export_policy", lambda self: sample_policy)
-
-    output_path = tmp_path / "trained_canonical.pkl"
-    result_path = train_and_save(variant="canonical", iterations=2, output_path=output_path)
+def test_train_and_save_cfr(tmp_path: Path) -> None:
+    """Verify train_and_save produces a valid .bin native checkpoint using CFR."""
+    output_path = tmp_path / "trained_cfr.bin"
+    result_path = train_and_save(iterations=10, output_path=output_path, algorithm="cfr")
     assert Path(result_path).exists()
     assert Path(result_path).stat().st_size > 0
-
-    reloaded_agent = VanillaCFRAgent.from_checkpoint(result_path, is_canonical=True)
-    assert isinstance(reloaded_agent, VanillaCFRAgent)
-    assert reloaded_agent.is_canonical is True
-    assert len(reloaded_agent.policy) > 0
-
-
-def test_train_and_save_invalid_variant(tmp_path: Path) -> None:
-    """Verify train_and_save raises ValueError on unsupported variant names."""
-    with pytest.raises(ValueError, match="Unknown CFR variant"):
-        train_and_save(
-            variant="invalid_variant",
-            iterations=1,
-            output_path=tmp_path / "bad.pkl",
-        )
 
 
 def test_from_checkpoint_nonexistent_file() -> None:

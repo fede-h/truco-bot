@@ -1,6 +1,5 @@
-candidate: "mccfr_ensemble_10k"
+candidate: "native"
 opponents:
-  - "mccfr_canonical_10k"
   - "equity"
   - "heuristic"
 n_matches: 100
