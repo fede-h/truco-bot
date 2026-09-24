@@ -1,6 +1,5 @@
 """Showdown runner for head-to-head bot evaluation."""
 
-import copy
 import random
 import time
 from collections.abc import Callable
@@ -57,32 +56,20 @@ class ShowdownRunner:
             active = env.state.active_player
             agent = p0_agent if active == 0 else p1_agent
 
+            t0 = time.perf_counter() if active == candidate_role else 0.0
+            action = (
+                agent.act_from_state(env.state)
+                if hasattr(agent, "act_from_state")
+                else agent.act(env.get_obs(active), env.get_mask())
+            )
             if active == candidate_role:
-                t0 = time.perf_counter()
-                if hasattr(agent, "act_from_state"):
-                    action = agent.act_from_state(env.state)
-                else:
-                    obs = env.get_obs(active)
-                    mask = env.get_mask()
-                    action = agent.act(obs, mask)
-                dt_ms = (time.perf_counter() - t0) * 1000.0
-
                 stats["decisions"] += 1
-                stats["total_time_ms"] += dt_ms
-
+                stats["total_time_ms"] += (time.perf_counter() - t0) * 1000.0
                 if track_bluff and action in _TRUCO_CALLS:
                     stats["truco_calls"] += 1
-                    cand_hand = env.state.hands[active]
-                    highest_rank = max((c.truco_rank for c in cand_hand), default=0)
+                    highest_rank = max((c.truco_rank for c in env.state.hands[active]), default=0)
                     if highest_rank < 10:
                         stats["bluff_calls"] += 1
-            else:
-                if hasattr(agent, "act_from_state"):
-                    action = agent.act_from_state(env.state)
-                else:
-                    obs = env.get_obs(active)
-                    mask = env.get_mask()
-                    action = agent.act(obs, mask)
 
             env.step(action)
 
@@ -96,12 +83,6 @@ class ShowdownRunner:
         for opp_name in config.opponents:
             cand_agent = self._load(config.candidate)
             opp_agent = self._load(opp_name)
-            if cand_agent is opp_agent:
-                # ponytail: guarantee independent agent instances in mirror matches
-                try:
-                    opp_agent = copy.deepcopy(cand_agent)
-                except Exception:  # noqa: BLE001
-                    opp_agent = self._load(opp_name)
 
             wins = 0
             losses = 0

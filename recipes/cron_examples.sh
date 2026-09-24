@@ -1,11 +1,5 @@
-# 1. Run immediate showdown with local MLflow tracking via uv
+# 1. Run immediate showdown via uv
 uv run python -m truco_bot.eval.runner --config experiments/showdown_example.yaml
-
-# 2. Run dry-run (offline, no MLflow database overhead)
-# uv run python -m truco_bot.eval.runner --config experiments/showdown_example.yaml --dry-run
-
-# 3. Launch the MLflow UI (using uv run so mlflow is available in your shell)
-# uv run mlflow ui --backend-store-uri sqlite:///mlruns.db
 
 # -----------------------------------------------------------------------------
 # AUTOMATION EXAMPLES (CRON & AT):

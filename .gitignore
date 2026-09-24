@@ -25,7 +25,6 @@ dist/
 target/
 *.egg-info/
 *.so
-mlflow.db
 
 # Operating system files
 .DS_Store
@@ -37,10 +36,6 @@ truco_bot/agents/cfr/models/*.pkl
 truco_bot/agents/cfr/models/*.db
 models/
 *.bin
-
-# MLflow tracking
-mlruns/
-mlruns.db
 
 # Experiments (ignore all YAMLs except showdown_example.yaml)
 experiments/*.yaml
