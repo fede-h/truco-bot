@@ -1,22 +1,18 @@
 """Tests for EnsembleCFRAgent, EquityFallback, and HandHistoryTracker."""
 
-import sqlite3
-from pathlib import Path
 
 from truco_bot.agents.base import Agent
 from truco_bot.agents.baselines.equity import EquityAgent
 from truco_bot.agents.baselines.heuristic import HeuristicAgent
 from truco_bot.agents.baselines.random import RandomAgent
-from truco_bot.agents.cfr.ensemble_agent import EnsembleCFRAgent
 from truco_bot.agents.cfr.fallback import EquityFallback
 from truco_bot.agents.cfr.history import HandHistoryTracker
+from truco_bot.agents.cfr.native_agent import NativeCFRAgent
 from truco_bot.core.actions import Action
-from truco_bot.core.card import ALL_CARDS, Card, Suit, create_card
-from truco_bot.core.state import create_initial_hand_state
+from truco_bot.core.card import Card, Suit, create_card
 from truco_bot.env.engine import TrucoHandEnv
 from truco_bot.env.obs import CARD_TO_ID
 from truco_bot.eval.arena import _run_single_match, play_duplicate_match
-
 
 # ---------------------------------------------------------------------------
 # Test Helpers
@@ -450,61 +446,18 @@ class TestHandHistoryTracker:
 # ---------------------------------------------------------------------------
 
 
-class TestEnsembleCFRAgent:
-    """Tests for EnsembleCFRAgent policy execution, fallback integration, and arena play."""
+class TestNativeCFRAgentFallback:
+    """Tests for NativeCFRAgent fallback integration and arena play."""
 
-    def test_ensemble_cfr_agent_implements_agent_abc(self) -> None:
-        """Verify EnsembleCFRAgent implements the Agent ABC."""
-        assert issubclass(EnsembleCFRAgent, Agent)
-        agent = EnsembleCFRAgent(policy={}, seed=42)
+    def test_native_cfr_agent_implements_agent_abc(self) -> None:
+        """Verify NativeCFRAgent implements the Agent ABC."""
+        assert issubclass(NativeCFRAgent, Agent)
+        agent = NativeCFRAgent(capacity=1024, seed=42)
         assert isinstance(agent, Agent)
-
-    def test_init_with_dict_and_sqlite(self, tmp_path: Path) -> None:
-        """Verify agent initializes from an in-memory dict or SQLite checkpoint."""
-        dict_agent = EnsembleCFRAgent(policy={}, seed=42)
-        assert isinstance(dict_agent.policy, dict)
-
-        # Create temporary SQLite policy database
-        db_path = tmp_path / "test_ensemble_init.db"
-        conn = sqlite3.connect(db_path)
-        conn.execute("CREATE TABLE policy (k BLOB PRIMARY KEY, a BLOB)")
-        import pickle
-
-        sample_key = ("test_key",)
-        sample_probs = {Action.PLAY_CARD_0: 1.0}
-        conn.execute(
-            "INSERT INTO policy (k, a) VALUES (?, ?)",
-            (pickle.dumps(sample_key), pickle.dumps(sample_probs)),
-        )
-        conn.commit()
-        conn.close()
-
-        loaded_agent = EnsembleCFRAgent.from_checkpoint(db_path, seed=42)
-        assert isinstance(loaded_agent, EnsembleCFRAgent)
-        assert len(loaded_agent.policy) > 0
-
-    def test_in_policy_action_execution(self) -> None:
-        """Verify agent executes CFR policy action when key is present in policy."""
-        h0 = list(ALL_CARDS[:3])
-        h1 = list(ALL_CARDS[3:6])
-        state = create_initial_hand_state([h0, h1], mano=0)
-
-        # Construct a known deterministic policy entry
-        from truco_bot.agents.cfr.isomorphism import canonical_infoset_key
-        key = canonical_infoset_key(state, 0)
-        policy = {key: {Action.PLAY_CARD_2: 1.0}}
-
-        agent = EnsembleCFRAgent(policy=policy, is_canonical=True, seed=42)
-
-        # act_from_state should pick PLAY_CARD_2 with 100% certainty
-        action = agent.act_from_state(state)
-        assert action == Action.PLAY_CARD_2
 
     def test_off_tree_invokes_equity_fallback_instead_of_uniform_random(self) -> None:
         """Verify agent delegates to EquityFallback on off-tree states, avoiding blunders."""
-        # Opponent played 10 de Copas (rank 5)
         opp_card = create_card(10, Suit.COPAS)
-        # Hand: 4 de Copas (rank 1), 11 de Espadas (rank 6), 3 de Espadas (rank 10)
         hand = [
             create_card(4, Suit.COPAS),
             create_card(11, Suit.ESPADAS),
@@ -513,10 +466,8 @@ class TestEnsembleCFRAgent:
         obs = _make_obs(hand, tc0=opp_card, current_trick=0, active_player=1, mano=0)
         mask = _make_mask([Action.PLAY_CARD_0, Action.PLAY_CARD_1, Action.PLAY_CARD_2])
 
-        # EquityFallback dictates PLAY_CARD_1 (lowest winning card, rank 6)
-        # A uniform random fallback would pick PLAY_CARD_0 (loses) or PLAY_CARD_2 (wasteful) ~66% of the time
         for test_seed in (1, 42, 99, 123, 777):
-            seeded_agent = EnsembleCFRAgent(policy={}, seed=test_seed)
+            seeded_agent = NativeCFRAgent(capacity=1024, seed=test_seed)
             action = seeded_agent.act(obs, mask)
             assert action == Action.PLAY_CARD_1, (
                 f"Agent with seed {test_seed} failed to invoke EquityFallback, picked {action}"
@@ -532,7 +483,7 @@ class TestEnsembleCFRAgent:
         obs = _make_obs(hand_low, current_trick=0)
         mask = _make_mask([Action.QUIERO_TRUCO, Action.NO_QUIERO_TRUCO])
 
-        agent = EnsembleCFRAgent(policy={}, seed=42)
+        agent = NativeCFRAgent(capacity=1024, seed=42)
         action = agent.act(obs, mask)
         assert action == Action.NO_QUIERO_TRUCO, (
             f"Off-tree agent must fold Truco with low cards, got {action}"
@@ -540,8 +491,8 @@ class TestEnsembleCFRAgent:
 
     def test_deterministic_behavior_given_same_seed(self) -> None:
         """Verify two agents with identical seeds produce identical action sequences."""
-        agent_a = EnsembleCFRAgent(policy={}, seed=1337)
-        agent_b = EnsembleCFRAgent(policy={}, seed=1337)
+        agent_a = NativeCFRAgent(capacity=1024, seed=1337)
+        agent_b = NativeCFRAgent(capacity=1024, seed=1337)
 
         env = TrucoHandEnv()
         env.reset(seed=100)
@@ -555,10 +506,10 @@ class TestEnsembleCFRAgent:
 
     def test_compatibility_with_arena_match_runners(self) -> None:
         """Verify agent seamlessly executes in _run_single_match and play_duplicate_match."""
-        agent = EnsembleCFRAgent(policy={}, seed=42)
+        agent = NativeCFRAgent(capacity=1024, seed=42)
         heuristic = HeuristicAgent()
         equity = EquityAgent()
-        random_agent = RandomAgent()
+        random_agent = RandomAgent(seed=42)
         env = TrucoHandEnv()
 
         # Single match vs heuristic
@@ -574,6 +525,6 @@ class TestEnsembleCFRAgent:
         assert isinstance(dup_random, int)
 
         # Duplicate match self-play
-        agent_twin = EnsembleCFRAgent(policy={}, seed=99)
+        agent_twin = NativeCFRAgent(capacity=1024, seed=99)
         dup_self = play_duplicate_match(agent, agent_twin, env, seed=42)
         assert isinstance(dup_self, int)

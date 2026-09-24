@@ -1,9 +1,5 @@
-from truco_bot.agents.cfr.agent import VanillaCFRAgent
-from truco_bot.agents.cfr.ensemble_agent import (
-    EnsembleCFRAgent,
-    EquityFallback,
-    HandHistoryTracker,
-)
+from truco_bot.agents.cfr.fallback import EquityFallback
+from truco_bot.agents.cfr.history import HandHistoryTracker
 from truco_bot.agents.cfr.isomorphism import (
     canonical_deal_partitions,
     canonical_infoset_key,
@@ -13,12 +9,14 @@ from truco_bot.agents.cfr.isomorphism import (
 from truco_bot.agents.cfr.native_agent import NativeCFRAgent
 from truco_bot.agents.cfr.train import train_and_save
 
+# Primary CFR agent alias
+CFRAgent = NativeCFRAgent
+
 __all__ = [
-    "EnsembleCFRAgent",
+    "CFRAgent",
     "EquityFallback",
     "HandHistoryTracker",
     "NativeCFRAgent",
-    "VanillaCFRAgent",
     "canonical_deal_partitions",
     "canonical_infoset_key",
     "canonicalize_hand",

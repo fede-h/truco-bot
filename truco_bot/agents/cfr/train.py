@@ -17,6 +17,7 @@ def train_and_save(
     threads: int | None = None,
     algorithm: str = "mccfr",
     cfr_plus: bool = True,
+    capacity: int = TABLE_CAPACITY,
     **kwargs,
 ) -> str:
     """Train native CFR solver and save policy table to disk."""
@@ -32,7 +33,7 @@ def train_and_save(
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     worker_threads = threads or max(1, os.cpu_count() or 4)
-    table = truco_engine.SharedPolicyTable(TABLE_CAPACITY)
+    table = truco_engine.SharedPolicyTable(capacity)
 
     t0 = time.perf_counter()
     train_fn = truco_engine.train_cfr_parallel if algo_key == "cfr" else truco_engine.train_parallel
@@ -82,6 +83,12 @@ if __name__ == "__main__":
         default=True,
         help="Use CFR+ non-negative regret floor",
     )
+    parser.add_argument(
+        "--capacity",
+        type=int,
+        default=TABLE_CAPACITY,
+        help="Table slot capacity",
+    )
     args = parser.parse_args()
 
     saved_path = train_and_save(
@@ -90,5 +97,6 @@ if __name__ == "__main__":
         output_path=args.output,
         algorithm=args.algorithm,
         cfr_plus=args.cfr_plus,
+        capacity=args.capacity,
     )
     print(f"Policy saved to {saved_path}")

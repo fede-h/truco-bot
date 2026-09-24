@@ -1,18 +1,16 @@
 """Native Compiled Shared-Memory CFR Agent using truco_engine."""
 
 import random
-from collections.abc import Sequence
 from pathlib import Path
 
-import truco_engine
 from truco_engine import BitboardState, SharedPolicyTable, get_policy_distribution
+
 from truco_bot.agents.base import Agent
 from truco_bot.agents.cfr.fallback import EquityFallback
 from truco_bot.agents.cfr.history import HandHistoryTracker
 from truco_bot.core.actions import Action
 from truco_bot.core.card import Card
 from truco_bot.core.state import GameState, get_legal_actions
-from truco_bot.env.obs import ID_TO_CARD
 
 _NUM_IDX_MAP = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 10: 7, 11: 8, 12: 9}
 
