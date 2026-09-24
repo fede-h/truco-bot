@@ -41,3 +41,6 @@ models/
 experiments/*.yaml
 experiments/*.yml
 !experiments/showdown_example.yaml
+
+# Execution logs
+logs/
