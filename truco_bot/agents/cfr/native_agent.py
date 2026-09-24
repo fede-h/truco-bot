@@ -108,10 +108,27 @@ class NativeCFRAgent(Agent):
         cls,
         filepath: str | Path,
         seed: int | None = None,
-        capacity: int = 67_108_864,
+        capacity: int | None = None,
     ) -> "NativeCFRAgent":
-        """Load native agent directly from binary .bin checkpoint."""
-        return cls(model_path=filepath, seed=seed, capacity=capacity)
+        """Load native agent directly from binary .bin checkpoint.
+
+        If capacity is not explicitly provided, dynamically sizes the table to the
+        next power-of-two keeping load factor <= 50% to optimize memory usage.
+        """
+        path = Path(filepath)
+        if not path.is_file():
+            raise FileNotFoundError(f"Model checkpoint not found: {path}")
+
+        if capacity is None:
+            size = path.stat().st_size
+            if size > 0 and size % 76 == 0:
+                num_nodes = size // 76
+                needed = max(1024, num_nodes * 2)
+                capacity = max(1024, 1 << (needed - 1).bit_length())
+            else:
+                capacity = 67_108_864
+
+        return cls(model_path=path, seed=seed, capacity=capacity)
 
     def act_from_state(self, state: GameState) -> Action:
         """Choose action given exact GameState using compiled native table lookup."""

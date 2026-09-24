@@ -3,8 +3,12 @@
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from truco_bot.agents.base import Agent
 from truco_bot.agents.baselines.equity import EquityAgent
