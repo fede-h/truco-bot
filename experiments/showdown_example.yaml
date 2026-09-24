@@ -1,7 +1,0 @@
-candidate: "native"
-opponents:
-  - "equity"
-  - "heuristic"
-n_matches: 100
-seed: 42
-track_bluff: true
