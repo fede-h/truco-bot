@@ -1,1 +1,0 @@
-"""Truco AI Bot package."""
