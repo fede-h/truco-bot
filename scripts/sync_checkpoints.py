@@ -45,6 +45,22 @@ def sync_models(
             synced_files.append(line)
             print(f"  ✓ Synced: {line}")
 
+    # Auto-prune older intermediate checkpoints on remote host once synced locally
+    if any("_step_" in f for f in synced_files):
+        prune_cmd = [
+            "ssh",
+            "-p",
+            str(port),
+            "-i",
+            expanded_key,
+            "-o",
+            "StrictHostKeyChecking=no",
+            f"root@{host}",
+            f"ls -t {remote_dir}/*_step_*.bin 2>/dev/null | tail -n +2 | xargs rm -f",
+        ]
+        subprocess.run(prune_cmd, capture_output=True, check=False)
+        print("  ✓ Remote storage pruned: preserved latest step checkpoint, deleted older steps on remote.")
+
     return synced_files
 
 
