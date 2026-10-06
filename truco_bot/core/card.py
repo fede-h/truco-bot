@@ -7,9 +7,13 @@ from enum import IntEnum
 # simple enum for suits
 class Suit(IntEnum):
     ESPADAS = 1
+    ESPADA = 1
     BASTOS = 2
+    BASTO = 2
     OROS = 3
+    ORO = 3
     COPAS = 4
+    COPA = 4
 
 
 @dataclass(frozen=True, slots=True)

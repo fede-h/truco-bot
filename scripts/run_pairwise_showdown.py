@@ -38,6 +38,9 @@ def instantiate_agent(spec: str, seed: int = 42) -> Agent:
         path = Path(spec)
         if not path.is_file():
             raise FileNotFoundError(f"Model file not found: {path}")
+        if path.suffix == ".pt":
+            from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
+            return DeepCFRAgent.from_checkpoint(path, seed=seed)
         return NativeCFRAgent.from_checkpoint(path, seed=seed)
 
 
@@ -45,9 +48,12 @@ def run_pairwise_showdown(
     agent_specs: dict[str, str],
     num_matches: int = 1000,
     seed: int = 42,
+    target_filter: str | None = None,
 ) -> dict:
     names = list(agent_specs.keys())
     pairs = list(itertools.combinations(names, 2))
+    if target_filter:
+        pairs = [(a, b) for a, b in pairs if a == target_filter or b == target_filter]
 
     print("=" * 80)
     print("STARTING PAIRWISE SHOWDOWN TOURNAMENT")
@@ -155,6 +161,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run memory-efficient pairwise showdown tournament")
     parser.add_argument("--matches", type=int, default=500, help="Duplicate matches per pair")
     parser.add_argument("--output", type=str, default="research/artifacts/showdown_results.json", help="Output JSON path")
+    parser.add_argument("--target-agent", type=str, default=None, help="Filter matchups to only include this agent")
     args = parser.parse_args()
 
     # Discover available completed models
@@ -168,6 +175,8 @@ def main() -> None:
         ("CFR_100k", "models/vanilla_cfr_100k.bin"),
         ("MCCFR_100M", "models/vanilla_mccfr_100M.bin"),
         ("MCCFR+_100M", "models/mccfr_plus_100M.bin"),
+        ("MCCFR+_1000M", "models/mccfr_plus_1000M.bin"),
+        ("DeepCFR", "models/deep_cfr_policy.pt"),
     ]
 
     for label, path_str in candidates:
@@ -175,7 +184,20 @@ def main() -> None:
         if p.is_file():
             available_models[label] = str(p)
 
-    results = run_pairwise_showdown(available_models, num_matches=args.matches)
+    if args.target_agent and args.target_agent not in available_models:
+        raise ValueError(f"Target agent '{args.target_agent}' not in available agents: {list(available_models.keys())}")
+
+    # If target agent specified, only run matchups involving that agent
+    if args.target_agent:
+        target = args.target_agent
+        target_dict = {target: available_models[target]}
+        for k, v in available_models.items():
+            if k != target:
+                target_dict[k] = v
+        # Filter pairs in showdown
+        results = run_pairwise_showdown(target_dict, num_matches=args.matches, target_filter=target)
+    else:
+        results = run_pairwise_showdown(available_models, num_matches=args.matches)
 
     out_file = Path(args.output)
     out_file.parent.mkdir(parents=True, exist_ok=True)

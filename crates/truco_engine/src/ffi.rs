@@ -175,6 +175,65 @@ impl PyBitboardState {
         self.0.score()
     }
 
+    #[getter]
+    pub fn score_p0(&self) -> u8 {
+        self.0.score_p0
+    }
+
+    #[getter]
+    pub fn score_p1(&self) -> u8 {
+        self.0.score_p1
+    }
+
+    #[getter]
+    pub fn max_score(&self) -> u8 {
+        self.0.max_score
+    }
+
+    #[getter]
+    pub fn hands(&self) -> Vec<Vec<u8>> {
+        vec![
+            self.0.hands[0].to_vec(),
+            self.0.hands[1].to_vec(),
+        ]
+    }
+
+    #[getter]
+    pub fn trick_cards(&self) -> Vec<u8> {
+        self.0.trick_cards.to_vec()
+    }
+
+    #[getter]
+    pub fn trick_results(&self) -> Vec<i8> {
+        self.0.trick_results.to_vec()
+    }
+
+    #[getter]
+    pub fn envido_chain(&self) -> Vec<u8> {
+        let len = self.0.envido_chain_len as usize;
+        self.0.envido_chain[..len].to_vec()
+    }
+
+    #[getter]
+    pub fn pending_envido_from(&self) -> u8 {
+        self.0.pending_envido_from
+    }
+
+    #[getter]
+    pub fn truco_caller(&self) -> u8 {
+        self.0.truco_caller
+    }
+
+    #[getter]
+    pub fn pending_truco_from(&self) -> u8 {
+        self.0.pending_truco_from
+    }
+
+    #[getter]
+    pub fn flags(&self) -> u8 {
+        self.0.flags
+    }
+
     pub fn step(&self, action: u8) -> Self {
         PyBitboardState(self.0.step(action))
     }
