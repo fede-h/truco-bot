@@ -129,6 +129,45 @@ def plot_baseline_performance() -> Path:
     return out_path
 
 
+def plot_deep_cfr_showdown() -> Path:
+    """Plot DeepCFR Head-to-Head Delta Points across all opponents in Showdown."""
+    df = pd.DataFrame({
+        "Opponent": [
+            "MCCFR+_100M\n(17.8M nodes)",
+            "MCCFR_100M\n(17.0M nodes)",
+            "RandomAgent\n(Uniform)",
+            "CFR_100k\n(Chance-Sampled)",
+            "MCCFR+_1000M\n(1B ground truth)",
+            "EquityAgent\n(MC rollouts)",
+            "HeuristicAgent\n(Over-bettor)",
+        ],
+        "Net Pts": [204, 48, -91, -154, -279, -667, -931],
+        "Avg Delta": [0.408, 0.096, -0.182, -0.308, -0.558, -1.334, -1.862],
+    })
+
+    fig, ax = plt.subplots(figsize=(9.5, 4.8))
+    # ponytail: clean diverging seaborn barplot
+    sns.barplot(data=df, x="Opponent", y="Avg Delta", ax=ax, hue="Opponent", palette="vlag", legend=False)
+
+    ax.axhline(0, color="black", linewidth=1.2)
+    for i, (_, row) in enumerate(df.iterrows()):
+        val = row["Avg Delta"]
+        pts = int(row["Net Pts"])
+        sign = "+" if val > 0 else ""
+        y_pos = val + 0.08 if val > 0 else val - 0.14
+        ax.text(i, y_pos, f"{sign}{val:.3f}\n({sign}{pts})", ha="center", va="center", fontweight="bold", fontsize=9.5)
+
+    ax.set_title("Deep CFR (688 KB Neural Policy) Pairwise Head-to-Head (500 Duplicate Matches/Pair)", fontweight="bold", pad=12)
+    ax.set_ylabel("Average Delta Points per Hand")
+    ax.set_ylim(-2.2, 0.7)
+    plt.tight_layout()
+
+    out_path = FIGURES_DIR / "fig4_deep_cfr_showdown.png"
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    return out_path
+
+
 def main() -> None:
     print("Generating Seaborn research figures...")
     p1 = plot_infoset_discovery()
@@ -137,6 +176,8 @@ def main() -> None:
     print(f"✓ Saved Figure 2: {p2}")
     p3 = plot_baseline_performance()
     print(f"✓ Saved Figure 3: {p3}")
+    p4 = plot_deep_cfr_showdown()
+    print(f"✓ Saved Figure 4: {p4}")
 
 
 if __name__ == "__main__":
