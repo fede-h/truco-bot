@@ -52,7 +52,11 @@ When implementing a ticket:
    ```
    /tdd Implement issue #5
    ```
-2. **The Red-Green-Refactor invariant**:
+2. **Subagent & Model Hierarchy**:
+   - The parent orchestrator dispatches leaf coding/testing tasks to subagents.
+   - Subagents route first to **free tier models** (e.g. `opencode/deepseek-v4.1-flash-free`), falling back to **Gemini 3.8 Flash** when unavailable.
+   - Concurrent tasks run in separate git worktrees to keep index/HEAD clean.
+3. **The Red-Green-Refactor invariant**:
    - The agent first writes a failing test in:
      - `crates/truco_engine/tests/` (Rust engine)
      - `tests/test_*.py` (Python wrappers / training scripts)

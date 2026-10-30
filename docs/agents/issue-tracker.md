@@ -14,6 +14,31 @@ Associated GitHub Project: [https://github.com/users/fede-h/projects/1](https://
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 
+## GitHub Project Board (#1) Operations
+
+Project URL: `https://github.com/users/fede-h/projects/1`
+- **Project ID**: `PVT_lAHOBFWBN84BpXiCzge6Fj4`
+- **Status Field ID**: `PVTSSF_lAHOBFWBN84BpXiCzhnzfS8`
+
+### Column Option IDs:
+| Status | Option ID |
+|---|---|
+| **Backlog** | `f75ad846` |
+| **Ready** | `e18bf179` |
+| **In progress** | `47fc9ee4` |
+| **In review** | `aba860b9` |
+| **Done** | `98236657` |
+
+### Moving a card between columns:
+1. Find the project item ID for an issue:
+   ```bash
+   gh project item-list 1 --owner fede-h --format json --jq '.items[] | select(.content.number == <issue_number>) | .id'
+   ```
+2. Move to column:
+   ```bash
+   gh project item-edit --project-id PVT_lAHOBFWBN84BpXiCzge6Fj4 --id <item_id> --field-id PVTSSF_lAHOBFWBN84BpXiCzhnzfS8 --single-select-option-id <option_id>
+   ```
+
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
 ## Pull requests as a triage surface

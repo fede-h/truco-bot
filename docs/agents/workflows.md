@@ -41,3 +41,14 @@ No feature or bugfix lands without an executable test proving the change:
 Before any significant issue is closed or PR merged:
 - Run `/judgment-day` to invoke independent reviewer subagents.
 - Ensure no exploitability regressions or undocumented invariant changes occur.
+
+## 5. Subagent Dispatch & Execution Rules
+
+1. **AFK Criterion**: Dispatch to a subagent only if the task runs without interactive user steering (e.g., automated exploration, ticket TDD slice, standards review).
+2. **Context Pointers Only**: Never dump parent chat logs into a subagent. Pass only pointers: ticket number/file, relevant interface, and repo path.
+3. **Model Selection**:
+   - Leaf tasks default to **Tier 1 Free Models** (`opencode/*-free`) via the `subagent` tool's `model` parameter.
+   - Fall back to **Tier 2 Fast Models** (`gemini-3.8-flash`) if Tier 1 is unavailable or rate-limited.
+4. **Worktree Isolation**: If multiple implementer subagents run concurrently, each runs in its own git worktree on an isolated branch to prevent index and HEAD collisions.
+5. **No Subagent Recursion**: Subagents must execute their own tasks and never spawn recursive child subagents.
+
