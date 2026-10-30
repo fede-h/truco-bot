@@ -172,6 +172,46 @@ class TrucoMatch:
             else []
         )
 
+        # ponytail: revealed opponent cards only for winner of accepted envido
+        revealed_opp_cards = []
+        opp = 1 - player
+        opp_won_envido = (opp == 0 and self.current_hand.score_p0 > 0) or (
+            opp == 1 and self.current_hand.score_p1 > 0
+        )
+        if (
+            self.current_hand.is_hand_done
+            and Action.QUIERO_ENVIDO in self.current_hand.envido_chain
+            and opp_won_envido
+        ):
+            full_opp = self.current_hand.hands[opp] + [
+                c for p, c in self.current_hand.played_cards if p == opp
+            ]
+            suits: dict[Any, list[Any]] = {}
+            for c in full_opp:
+                suits.setdefault(c.suit.value, []).append(c)
+            pairs = [cards for cards in suits.values() if len(cards) >= 2]
+            if pairs:
+                best_suit_cards = max(
+                    pairs,
+                    key=lambda cs: sum(
+                        c.envido_value
+                        for c in sorted(
+                            cs, key=lambda c: (c.envido_value, c.number), reverse=True
+                        )[:2]
+                    ),
+                )
+                env_cards = sorted(
+                    best_suit_cards, key=lambda c: (c.envido_value, c.number), reverse=True
+                )[:2]
+            else:
+                env_cards = [max(full_opp, key=lambda c: (c.envido_value, c.number))]
+
+            revealed_opp_cards = [
+                {"number": c.number, "suit": c.suit.name}
+                for c in env_cards
+                if c in self.current_hand.hands[opp]
+            ]
+
         return {
             "match_score": (self.state.match_score_p0, self.state.match_score_p1),
             "target_score": self.state.target_score,
@@ -181,6 +221,9 @@ class TrucoMatch:
             "is_hand_done": self.current_hand.is_hand_done,
             "is_match_done": self.state.is_match_done,
             "match_winner": self.state.match_winner,
+            "hand_winner": self.current_hand.winner,
+            "hand_points_won": self.current_hand.points_won,
+            "revealed_opponent_cards": revealed_opp_cards,
             "my_hand": my_cards,
             "opponent_card_count": opp_count,
             "table_cards": table_cards,

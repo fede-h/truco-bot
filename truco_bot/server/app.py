@@ -75,8 +75,6 @@ async def websocket_play(websocket: WebSocket) -> None:
                         }
                     )
                 else:
-                    if session.is_hand_done:
-                        session.next_hand()
                     await websocket.send_json(
                         {
                             "type": "state",

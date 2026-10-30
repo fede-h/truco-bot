@@ -33,13 +33,16 @@ uv run python scripts/run_match_showdown.py --agent0 models/mccfr_plus_1000M.bin
 
 ---
 
-## Interactive WebSocket Server
+## Interactive WebSocket Server & Retro Console UI
 
-Run the FastAPI real-time gameplay server:
+Run the FastAPI real-time gameplay server with retro web console UI:
 
 ```bash
-uv run uvicorn truco_bot.server.app:app --host 0.0.0.0 --port 8000
+uv run uvicorn truco_bot.server.app:app --reload
 ```
+
+Open `http://localhost:8000/` in your browser to play against heuristic or CFR agents.
+Card graphics credit: "Spanish Deck – Pixel Art by jcanabal".
 
 Connect to `ws://localhost:8000/play` with JSON frames:
 

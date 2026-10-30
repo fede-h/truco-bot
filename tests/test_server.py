@@ -593,3 +593,297 @@ class TestTicket15EventsAndBidding:
 
         assert "#f2ead3" in css, "Speech bubbles need the cream #f2ead3 fill"
 
+
+class TestTicket16HandOverRevealAndMatchEnd:
+    """Adversarial RED tests for Ticket #16.
+
+    The hand-over pause must survive over WebSocket, the envido reveal must obey
+    "las que se cantan se muestran", and the match-over overlay must replace the
+    old blocking ``alert()``.
+    """
+
+    @staticmethod
+    def _session_with_hands(hands: list[list[tuple[int, str]]], mano: int = 0) -> MatchSession:
+        card_map = {(c.number, c.suit.name): c for c in ALL_CARDS}
+        session = MatchSession(
+            mode="human_vs_human",
+            target_score=30,
+            simulate_delay=False,
+            seed=42,
+        )
+        session.match.state.mano = mano
+        session.match.current_hand = create_initial_hand_state(
+            hands=[[card_map[key] for key in hand] for hand in hands],
+            mano=mano,
+            score_p0=0,
+            score_p1=0,
+            max_score=30,
+        )
+        return session
+
+    def test_websocket_pauses_at_hand_over_instead_of_auto_advancing(self):
+        client = TestClient(app)
+        with client.websocket_connect("/play") as ws:
+            ws.send_json(
+                {
+                    "type": "start",
+                    "mode": "human_vs_bot",
+                    "bot": "heuristic",
+                    "target_score": 30,
+                    "simulate_delay": False,
+                    "seed": 42,
+                }
+            )
+            initial = ws.receive_json()
+            assert initial["type"] == "state"
+            assert initial["state"]["mano"] == 0, "Human must be mano in hand 0"
+
+            # Folding finishes hand 0 immediately (1 point) without ending a 30-point match.
+            ws.send_json({"type": "action", "action": "IR_AL_MAZO"})
+            msg = ws.receive_json()
+            assert msg["type"] == "state", f"Hand-over must be a state frame, got {msg!r}"
+
+            state = msg["state"]
+            assert state["hand_index"] == 0, (
+                "Server auto-advanced to the next hand instead of pausing on hand_over: "
+                f"hand_index={state['hand_index']}"
+            )
+            assert state["is_hand_done"] is True
+            assert state["hand_winner"] == 1, "Folding as mano hands the hand to the bot (P1)"
+            assert state["hand_points_won"] >= 1
+            assert "revealed_opponent_cards" in state
+            assert state["revealed_opponent_cards"] == [], (
+                "No Envido was accepted or won by the bot, so no card may be revealed"
+            )
+
+            ws.send_json({"type": "next_hand"})
+            nxt = ws.receive_json()
+            assert nxt["type"] == "state"
+            assert nxt["state"]["hand_index"] == 1, "next_hand must deal hand 1"
+            assert nxt["state"]["is_hand_done"] is False
+
+    def test_revealed_opponent_cards_authentic_envido_rules_tricky_cases(self):
+        # Case A: bot wins accepted Envido with an OROS pair; one pair card is on
+        # the table, the other pair card must be revealed, the off-suit card hidden.
+        session = self._session_with_hands(
+            [
+                [(4, "COPAS"), (5, "COPAS"), (2, "BASTOS")],
+                [(7, "OROS"), (6, "OROS"), (1, "ESPADAS")],
+            ]
+        )
+        session.step_action(Action.ENVIDO)  # P0 calls
+        session.step_action(Action.QUIERO_ENVIDO)  # P1 accepts: 33 vs 29
+
+        view = session.get_view(0)
+        assert view["is_hand_done"] is False
+        assert "revealed_opponent_cards" in view, (
+            "get_view() must always expose revealed_opponent_cards"
+        )
+        assert view["revealed_opponent_cards"] == [], (
+            "Unplayed bot cards must stay face-down while the hand is in progress"
+        )
+
+        session.step_action(Action.PLAY_CARD_0)  # P0: 4 COPAS
+        session.step_action(Action.PLAY_CARD_0)  # P1: 7 OROS (pair card now on table)
+        assert session.get_view(0)["is_hand_done"] is False
+        session.step_action(Action.IR_AL_MAZO)  # active player folds -> hand over
+
+        view = session.get_view(0)
+        assert view["is_hand_done"] is True
+        assert view["revealed_opponent_cards"] == [{"number": 6, "suit": "OROS"}], (
+            "Only 6 OROS (unplayed half of the winning 33-point OROS pair) may be shown; "
+            "7 OROS is already on the table and 1 ESPADAS was never part of the Envido"
+        )
+
+        # Case B: three OROS; only the two that formed the 33-point Envido are revealed.
+        session = self._session_with_hands(
+            [
+                [(4, "COPAS"), (5, "COPAS"), (2, "BASTOS")],
+                [(7, "OROS"), (6, "OROS"), (4, "OROS")],
+            ]
+        )
+        session.step_action(Action.ENVIDO)
+        session.step_action(Action.QUIERO_ENVIDO)
+        session.step_action(Action.IR_AL_MAZO)
+
+        view = session.get_view(0)
+        assert view["is_hand_done"] is True
+        revealed = view["revealed_opponent_cards"]
+        assert len(revealed) == 2, f"Exactly the top two OROS must be revealed, got {revealed!r}"
+        assert {(c["number"], c["suit"]) for c in revealed} == {
+            (7, "OROS"),
+            (6, "OROS"),
+        }, f"Wrong Envido pair revealed: {revealed!r}"
+        assert all(
+            not (c["number"] == 4 and c["suit"] == "OROS") for c in revealed
+        ), "4 OROS did not form the 33-point Envido and must stay hidden"
+
+        # Case C: three different suits; only the single highest Envido card shows.
+        session = self._session_with_hands(
+            [
+                [(6, "COPAS"), (4, "OROS"), (12, "BASTOS")],
+                [(7, "BASTOS"), (5, "OROS"), (10, "ESPADAS")],
+            ],
+            mano=1,
+        )
+        session.step_action(Action.ENVIDO)  # P1 (bot) calls
+        session.step_action(Action.QUIERO_ENVIDO)  # P0 accepts: 6 vs 7
+        session.step_action(Action.IR_AL_MAZO)  # P1 folds
+
+        view = session.get_view(0)
+        assert view["is_hand_done"] is True
+        assert view["revealed_opponent_cards"] == [{"number": 7, "suit": "BASTOS"}], (
+            "With three distinct suits only the single highest Envido card (7 BASTOS) is shown"
+        )
+
+        # Case D: the loser of an accepted Envido says "Son buenas" and shows nothing.
+        session = self._session_with_hands(
+            [
+                [(7, "OROS"), (6, "OROS"), (1, "ESPADAS")],
+                [(4, "COPAS"), (5, "COPAS"), (2, "BASTOS")],
+            ]
+        )
+        session.step_action(Action.ENVIDO)  # P0 calls
+        session.step_action(Action.QUIERO_ENVIDO)  # P1 accepts but loses 29 vs 33
+        session.step_action(Action.IR_AL_MAZO)
+
+        view = session.get_view(0)
+        assert view["is_hand_done"] is True
+        assert view["revealed_opponent_cards"] == [], (
+            "Bot lost the accepted Envido: its cards must not be revealed"
+        )
+
+        # Case D (declined): a NO_QUIERO Envido never reveals the bot's cards.
+        session = self._session_with_hands(
+            [
+                [(7, "ESPADAS"), (6, "ESPADAS"), (4, "COPAS")],
+                [(7, "OROS"), (5, "OROS"), (4, "BASTOS")],
+            ]
+        )
+        session.step_action(Action.ENVIDO)
+        session.step_action(Action.NO_QUIERO_ENVIDO)
+        session.step_action(Action.IR_AL_MAZO)
+
+        view = session.get_view(0)
+        assert view["is_hand_done"] is True
+        assert view["revealed_opponent_cards"] == [], (
+            "A declined Envido must not reveal the bot's cards"
+        )
+
+    def test_early_envido_match_cutoff_emits_match_over(self, monkeypatch):
+        # ``truco_bot.server.app`` is shadowed by the FastAPI instance on the package,
+        # so fetch the real module from sys.modules before patching it.
+        import importlib
+
+        app_module = importlib.import_module("truco_bot.server.app")
+
+        card_map = {(c.number, c.suit.name): c for c in ALL_CARDS}
+        created_sessions: list[MatchSession] = []
+
+        def fabricate_session(*args, **kwargs):
+            session = MatchSession(
+                mode="human_vs_human",
+                target_score=15,
+                simulate_delay=False,
+                seed=42,
+            )
+            session.match.state.match_score_p0 = 14
+            session.match.current_hand = create_initial_hand_state(
+                hands=[
+                    [card_map[(7, "OROS")], card_map[(6, "OROS")], card_map[(4, "COPAS")]],
+                    [card_map[(4, "BASTOS")], card_map[(5, "BASTOS")], card_map[(2, "COPAS")]],
+                ],
+                mano=0,
+                score_p0=0,
+                score_p1=0,
+                max_score=15,
+            )
+            created_sessions.append(session)
+            return session
+
+        monkeypatch.setattr(app_module, "MatchSession", fabricate_session)
+
+        # Controller-level guard: 14 + 2 Envido points reaches the 15-point target.
+        controller_session = fabricate_session()
+        controller_session.step_action(Action.ENVIDO)
+        controller_session.step_action(Action.QUIERO_ENVIDO)
+        assert controller_session.is_match_done is True
+        assert controller_session.match_winner == 0
+        assert controller_session.match.state.match_score_p0 == 16
+
+        client = TestClient(app)
+        with client.websocket_connect("/play") as ws:
+            ws.send_json(
+                {
+                    "type": "start",
+                    "mode": "human_vs_human",
+                    "target_score": 15,
+                    "simulate_delay": False,
+                    "seed": 42,
+                }
+            )
+            first = ws.receive_json()
+            assert first["type"] == "state"
+            assert first["state"]["match_score"][0] == 14
+
+            ws.send_json({"type": "action", "action": "ENVIDO"})
+            envido_call = ws.receive_json()
+            assert envido_call["type"] == "state"
+
+            ws.send_json({"type": "action", "action": "QUIERO_ENVIDO"})
+            msg = ws.receive_json()
+            assert msg["type"] == "match_over", (
+                f"Early Envido cutoff must emit match_over, got {msg!r}"
+            )
+            assert msg["winner"] == 0
+            assert msg["final_score"][0] >= 15
+            assert any(e.get("type") == "envido_rollout" for e in msg["events"]), (
+                "match_over frame must carry the envido_rollout events"
+            )
+
+    def test_static_ui_hand_hold_2000ms_match_over_overlay_and_readme_docs(self):
+        client = TestClient(app)
+        index_res = client.get("/")
+        js_res = client.get("/static/game.js")
+        css_res = client.get("/static/style.css")
+
+        assert index_res.status_code == 200
+        assert js_res.status_code == 200
+        assert css_res.status_code == 200
+        assert "text/html" in index_res.headers.get("content-type", "")
+
+        js = js_res.text
+        assert re.search(r"\b2000\b", js), "The table must hold the finished hand for ~2000 ms"
+        assert "next_hand" in js, "The client must deal the next hand after the ~2 s hold"
+        assert "revealed_opponent_cards" in js, (
+            "The client must flip the server-revealed Envido cards face-up"
+        )
+        assert "hand_points_won" in js, "The client must display the points won in the hand"
+
+        point_bubble_patterns = (
+            r"\+\$\{[^}]*points",
+            r'"\+"\s*\+',
+            r"'\+'\s*\+",
+            r'"\+N"',
+            r"\+N",
+        )
+        assert any(re.search(pattern, js) for pattern in point_bubble_patterns), (
+            "Hand-over must show a '+N' points indicator bubble"
+        )
+
+        for text in ("¡GANASTE!", "PERDISTE", "REVANCHA", "CAMBIAR AGENTE"):
+            assert text in js, f"Missing match-over overlay text: {text}"
+
+        assert "window.alert" not in js, "Match-over must not use window.alert()"
+        assert not re.search(r"(?<![\w.$])alert\s*\(", js), (
+            "Match-over must not use blocking alert()"
+        )
+
+        readme = Path("README.md").read_text(encoding="utf-8")
+        assert "uv run uvicorn truco_bot.server.app:app --reload" in readme, (
+            "README must document how to launch the UI server"
+        )
+        assert "Spanish Deck – Pixel Art by jcanabal" in readme, (
+            "README must credit the Spanish Deck pixel art author"
+        )
+

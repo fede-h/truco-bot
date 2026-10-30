@@ -82,7 +82,24 @@ async function processEvents(events) {
   isReplaying = false;
 }
 
+let currentBot = "heuristic";
+let currentTargetScore = 30;
+
+// Match-over overlay buttons: "REVANCHA" and "CAMBIAR AGENTE"
+function showMatchOver(winner, finalScore) {
+  const overlay = document.getElementById("match-over-overlay");
+  const title = document.getElementById("match-over-title");
+  const score = document.getElementById("match-over-score");
+  if (!overlay || !title || !score) return;
+
+  title.textContent = winner === 0 ? "¡GANASTE!" : "PERDISTE";
+  score.textContent = `VOS: ${finalScore[0]} - BOT: ${finalScore[1]}`;
+  overlay.classList.remove("hidden");
+}
+
 function connectWebSocket(bot, targetScore) {
+  currentBot = bot;
+  currentTargetScore = targetScore;
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${protocol}//${window.location.host}/play`);
 
@@ -104,17 +121,16 @@ function connectWebSocket(bot, targetScore) {
       await processEvents(msg.events);
     }
     if (msg.type === "state") {
-      renderState(msg.state);
+      await renderState(msg.state);
     } else if (msg.type === "match_over") {
-      alert(`Partida terminada! Ganador: ${msg.winner === 0 ? "Vos" : "Bot"}`);
-      location.reload();
+      showMatchOver(msg.winner, msg.final_score);
     } else if (msg.type === "error") {
-      alert(`Error: ${msg.message}`);
+      console.error("Server error:", msg.message);
     }
   };
 }
 
-function renderState(state) {
+async function renderState(state) {
   currentState = state;
 
   document.getElementById("score-vos").textContent = state.match_score[0];
@@ -128,10 +144,18 @@ function renderState(state) {
     state.mano === 0 ? "TU MANO" : "MANO BOT";
   document.getElementById("hud-truco-level").textContent = state.truco_level;
 
-  // Bot hand
+  // Bot hand: revealed opponent cards face-up, rest face-down
   const botHand = document.getElementById("bot-hand");
   botHand.innerHTML = "";
-  for (let i = 0; i < state.opponent_card_count; i++) {
+  const revealed = state.revealed_opponent_cards || [];
+  revealed.forEach((c) => {
+    const img = document.createElement("img");
+    img.src = cardUrl(c);
+    img.className = "card-sprite";
+    botHand.appendChild(img);
+  });
+  const unrevealedCount = Math.max(0, state.opponent_card_count - revealed.length);
+  for (let i = 0; i < unrevealedCount; i++) {
     const img = document.createElement("img");
     img.src = "/static/cards/back.png";
     img.className = "card-sprite";
@@ -197,6 +221,21 @@ function renderState(state) {
     };
     actionBar.appendChild(btn);
   });
+
+  if (state.is_match_done) {
+    showMatchOver(state.match_winner, state.match_score);
+    return;
+  }
+
+  if (state.is_hand_done) {
+    if (state.hand_winner !== null && state.hand_winner !== undefined && state.hand_points_won > 0) {
+      showBubble(state.hand_winner, `+${state.hand_points_won}`, 2000);
+    }
+    await sleep(2000);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "next_hand" }));
+    }
+  }
 }
 
 document.getElementById("start-btn").onclick = () => {
@@ -205,9 +244,23 @@ document.getElementById("start-btn").onclick = () => {
     document.querySelector('input[name="target_score"]:checked').value,
     10
   );
+  document.getElementById("match-over-overlay").classList.add("hidden");
   document.getElementById("menu-screen").classList.add("hidden");
   document.getElementById("table-screen").classList.remove("hidden");
   connectWebSocket(bot, targetScore);
+};
+
+document.getElementById("revancha-btn").onclick = () => {
+  document.getElementById("match-over-overlay").classList.add("hidden");
+  if (ws) ws.close();
+  connectWebSocket(currentBot, currentTargetScore);
+};
+
+document.getElementById("menu-btn").onclick = () => {
+  document.getElementById("match-over-overlay").classList.add("hidden");
+  document.getElementById("table-screen").classList.add("hidden");
+  document.getElementById("menu-screen").classList.remove("hidden");
+  if (ws) ws.close();
 };
 
 window.onload = initMenu;
