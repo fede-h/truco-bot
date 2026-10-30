@@ -3,6 +3,7 @@
 import pytest
 import torch
 from torch import nn
+
 from truco_bot.agents.deep_cfr.network import PolicyNetwork
 
 
