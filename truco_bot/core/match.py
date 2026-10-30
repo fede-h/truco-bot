@@ -3,8 +3,13 @@ from typing import Any
 
 from truco_bot.core.actions import Action
 from truco_bot.core.deck import deal
-from truco_bot.core.rules import calculate_envido
-from truco_bot.core.state import GameState, create_initial_hand_state, get_legal_actions
+from truco_bot.core.rules import calculate_envido, get_envido_cards
+from truco_bot.core.state import (
+    GameState,
+    create_initial_hand_state,
+    dealt_hand,
+    get_legal_actions,
+)
 from truco_bot.core.state import step as core_step
 
 
@@ -81,21 +86,17 @@ class TrucoMatch:
         delta_p1 = self.current_hand.score_p1 - p1_before
 
         if action == Action.QUIERO_ENVIDO:
-            full_p0 = self.current_hand.hands[0] + [
-                c for p, c in self.current_hand.played_cards if p == 0
-            ]
-            full_p1 = self.current_hand.hands[1] + [
-                c for p, c in self.current_hand.played_cards if p == 1
-            ]
-            pts_mano = calculate_envido(full_p0 if self.state.mano == 0 else full_p1)
-            pts_pie = calculate_envido(full_p1 if self.state.mano == 0 else full_p0)
+            mano = self.state.mano
+            pie = 1 - mano
+            pts_mano = calculate_envido(dealt_hand(self.current_hand, mano))
+            pts_pie = calculate_envido(dealt_hand(self.current_hand, pie))
             winner = 0 if self.current_hand.score_p0 > p0_before else 1
             self.events.append(
                 {
                     "type": "envido_rollout",
-                    "mano_player": self.state.mano,
+                    "mano_player": mano,
                     "mano_points": pts_mano,
-                    "pie_player": 1 - self.state.mano,
+                    "pie_player": pie,
                     "pie_points": pts_pie,
                     "winner": winner,
                     "points_awarded": delta_p0 + delta_p1,
@@ -183,29 +184,7 @@ class TrucoMatch:
             and Action.QUIERO_ENVIDO in self.current_hand.envido_chain
             and opp_won_envido
         ):
-            full_opp = self.current_hand.hands[opp] + [
-                c for p, c in self.current_hand.played_cards if p == opp
-            ]
-            suits: dict[Any, list[Any]] = {}
-            for c in full_opp:
-                suits.setdefault(c.suit.value, []).append(c)
-            pairs = [cards for cards in suits.values() if len(cards) >= 2]
-            if pairs:
-                best_suit_cards = max(
-                    pairs,
-                    key=lambda cs: sum(
-                        c.envido_value
-                        for c in sorted(
-                            cs, key=lambda c: (c.envido_value, c.number), reverse=True
-                        )[:2]
-                    ),
-                )
-                env_cards = sorted(
-                    best_suit_cards, key=lambda c: (c.envido_value, c.number), reverse=True
-                )[:2]
-            else:
-                env_cards = [max(full_opp, key=lambda c: (c.envido_value, c.number))]
-
+            env_cards = get_envido_cards(dealt_hand(self.current_hand, opp))
             revealed_opp_cards = [
                 {"number": c.number, "suit": c.suit.name}
                 for c in env_cards

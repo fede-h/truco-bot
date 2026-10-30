@@ -48,13 +48,18 @@ function cardUrl(card) {
   return `/static/cards/${card.suit.toLowerCase()}_${card.number}.png`;
 }
 
-function showBubble(player, text, durationMs = 1500) {
+const bubbleTimers = { 0: null, 1: null };
+
+function showBubble(player, text, durationMs = 1200) {
   const id = player === 0 ? "human-bubble" : "bot-bubble";
   const el = document.getElementById(id);
   if (!el) return;
+  if (bubbleTimers[player]) {
+    clearTimeout(bubbleTimers[player]);
+  }
   el.textContent = text;
   el.classList.remove("hidden");
-  setTimeout(() => el.classList.add("hidden"), durationMs);
+  bubbleTimers[player] = setTimeout(() => el.classList.add("hidden"), durationMs);
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,18 +71,21 @@ async function processEvents(events) {
     if (ev.type === "action") {
       const text = SPEECH_CALLS[ev.action];
       if (text) {
-        showBubble(ev.player, text, 800);
+        showBubble(ev.player, text, 1000);
+      }
+      if (ev.player === 1) {
+        await sleep(600);
       }
     } else if (ev.type === "envido_rollout") {
-      showBubble(ev.mano_player, "Tengo " + ev.mano_points, 800);
+      showBubble(ev.mano_player, "Tengo " + ev.mano_points, 1200);
       await sleep(600);
       const pieText =
         ev.winner === ev.pie_player
           ? "¡Y son mejores! (" + ev.pie_points + ")"
           : "Son buenas";
-      showBubble(ev.pie_player, pieText, 800);
+      showBubble(ev.pie_player, pieText, 1200);
+      await sleep(600);
     }
-    await sleep(600);
   }
   isReplaying = false;
 }
@@ -126,6 +134,13 @@ function connectWebSocket(bot, targetScore) {
       showMatchOver(msg.winner, msg.final_score);
     } else if (msg.type === "error") {
       console.error("Server error:", msg.message);
+      const errEl = document.getElementById("menu-error");
+      if (errEl) {
+        errEl.textContent = msg.message;
+        errEl.classList.remove("hidden");
+      }
+      document.getElementById("table-screen").classList.add("hidden");
+      document.getElementById("menu-screen").classList.remove("hidden");
     }
   };
 }
@@ -239,6 +254,8 @@ async function renderState(state) {
 }
 
 document.getElementById("start-btn").onclick = () => {
+  const errEl = document.getElementById("menu-error");
+  if (errEl) errEl.classList.add("hidden");
   const bot = document.getElementById("agent-select").value;
   const targetScore = parseInt(
     document.querySelector('input[name="target_score"]:checked').value,

@@ -31,9 +31,9 @@ def discover_agents(models_dir: Path = Path("models")) -> list[str]:
 
 def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     low = name.lower()
-    s = seed if seed is not None else 42
+    agent_seed = seed if seed is not None else 42
     if low == "random":
-        return RandomAgent(seed=s)
+        return RandomAgent(seed=agent_seed)
     elif low == "heuristic":
         return HeuristicAgent()
     elif low == "equity":
@@ -41,7 +41,7 @@ def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     elif low == "mccfr_1000m":
         p = Path("models/mccfr_plus_1000M.bin")
         if p.is_file():
-            return NativeCFRAgent.from_checkpoint(p, seed=s)
+            return NativeCFRAgent.from_checkpoint(p, seed=agent_seed)
         raise ValueError(f"Unknown or unavailable agent: {name}")
 
     if ".." in name or "/" in name or "\\" in name or "_step_" in name:
@@ -50,12 +50,12 @@ def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     if name in discover_agents():
         bin_p = Path(f"models/{name}.bin")
         if bin_p.is_file():
-            return NativeCFRAgent.from_checkpoint(bin_p, seed=s)
+            return NativeCFRAgent.from_checkpoint(bin_p, seed=agent_seed)
         pt_p = Path(f"models/{name}.pt")
         if pt_p.is_file():
             from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
 
-            return DeepCFRAgent.from_checkpoint(pt_p, seed=s)
+            return DeepCFRAgent.from_checkpoint(pt_p, seed=agent_seed)
 
     raise ValueError(f"Unknown or unavailable agent: {name}")
 
