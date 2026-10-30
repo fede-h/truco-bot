@@ -264,8 +264,10 @@ fn test_resolve_hand_all_scenarios() {
 
 #[test]
 fn test_calculate_falta_envido() {
-    assert_eq!(calculate_falta_envido_points(0, 0, 30), 30);
-    assert_eq!(calculate_falta_envido_points(10, 20, 30), 10);
-    assert_eq!(calculate_falta_envido_points(28, 25, 30), 2);
-    assert_eq!(calculate_falta_envido_points(15, 12, 15), 0);
+    assert_eq!(calculate_falta_envido_points(0, 0, 30, 0), 30);
+    assert_eq!(calculate_falta_envido_points(4, 8, 30, 0), 26);
+    assert_eq!(calculate_falta_envido_points(4, 8, 30, 1), 22);
+    assert_eq!(calculate_falta_envido_points(10, 20, 30, 0), 10);
+    assert_eq!(calculate_falta_envido_points(28, 25, 30, 0), 2);
+    assert_eq!(calculate_falta_envido_points(15, 12, 15, 0), 0);
 }

@@ -73,7 +73,9 @@ class ShowdownRunner:
 
             env.step(action)
 
-        return env.state.score_p0 - env.state.score_p1
+        p0_total = env.state.score_p0 + (env.state.points_won if env.state.winner == 0 else 0)
+        p1_total = env.state.score_p1 + (env.state.points_won if env.state.winner == 1 else 0)
+        return p0_total - p1_total
 
     def run_showdown(self, config: ShowdownConfig) -> dict[str, dict[str, Any]]:
         """Run duplicate matches against all configured opponents"""

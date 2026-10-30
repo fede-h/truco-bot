@@ -60,5 +60,12 @@ def resolve_hand(trick_results: list[int], mano: int = 0) -> int | None:
     return None
 
 
-def calculate_falta_envido_points(score_p0: int, score_p1: int, max_score: int = 30) -> int:
-    return max_score - max(score_p0, score_p1)
+def calculate_falta_envido_points(
+    score_p0: int, score_p1: int, max_score: int = 30, winner: int = 0
+) -> int:
+    malas_threshold = max_score // 2
+    if score_p0 < malas_threshold and score_p1 < malas_threshold:
+        winner_score = score_p0 if winner == 0 else score_p1
+        return max_score - winner_score
+    else:
+        return max_score - max(score_p0, score_p1)

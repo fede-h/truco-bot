@@ -303,9 +303,9 @@ pub fn resolve_hand(trick_results: Vec<i8>, mano: u8) -> Option<u8> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (score_p0, score_p1, max_score=30))]
-pub fn calculate_falta_envido_points(score_p0: u8, score_p1: u8, max_score: u8) -> u8 {
-    rust_calculate_falta(score_p0, score_p1, max_score)
+#[pyo3(signature = (score_p0, score_p1, max_score=30, winner=0))]
+pub fn calculate_falta_envido_points(score_p0: u8, score_p1: u8, max_score: u8, winner: u8) -> u8 {
+    rust_calculate_falta(score_p0, score_p1, max_score, winner)
 }
 
 #[pyfunction]

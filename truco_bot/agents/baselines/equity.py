@@ -10,23 +10,26 @@ with open('truco_bot/core/lookup/equity.pkl', 'rb') as file:
 
 
 class EquityAgent(Agent):
-    
     def act(self, obs: tuple[int, ...], mask: list[bool]) -> Action:
         valids = [i for i, is_legal in enumerate(mask) if is_legal]
-        
-        if mask[Action.ENVIDO.value]:
-            hand = frozenset([ID_TO_CARD[i] for i in obs[:3]])
-            is_mano = (obs[10] == obs[11])
+        card_ids = [i for i in obs[:3] if i in ID_TO_CARD]
+        # If player already led a card on trick 0, recover it from table (obs[3])
+        if len(card_ids) < 3 and obs[3] in ID_TO_CARD:
+            card_ids.append(obs[3])
 
-            if equity_lookup[hand][is_mano] > 0.65:
-                return Action.ENVIDO
-            else: return Action(choice(valids))
-        elif mask[Action.QUIERO_ENVIDO.value]:
-            hand = frozenset([ID_TO_CARD[i] for i in obs[:3]])
-            is_mano = (obs[10] == obs[11])
+        if len(card_ids) == 3:
+            hand = frozenset([ID_TO_CARD[i] for i in card_ids])
+            is_mano = obs[10] == obs[11]
 
-            if equity_lookup[hand][is_mano] > 0.65:
-                return Action.QUIERO_ENVIDO
-            else: return Action.NO_QUIERO_ENVIDO
-        else:
-            return Action(choice(valids))
+            if mask[Action.ENVIDO.value]:
+                if equity_lookup[hand][is_mano] > 0.65:
+                    return Action.ENVIDO
+                else:
+                    return Action(choice(valids))
+            elif mask[Action.QUIERO_ENVIDO.value]:
+                if equity_lookup[hand][is_mano] > 0.65:
+                    return Action.QUIERO_ENVIDO
+                else:
+                    return Action.NO_QUIERO_ENVIDO
+
+        return Action(choice(valids))
