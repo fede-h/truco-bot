@@ -1,8 +1,24 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pathlib import Path
 
-from truco_bot.server.controller import MatchSession
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from truco_bot.server.controller import MatchSession, discover_agents
 
 app = FastAPI(title="Truco Bot API")
+static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/")
+def get_index():
+    return FileResponse(static_dir / "index.html")
+
+
+@app.get("/agents")
+def get_agents():
+    return {"agents": discover_agents()}
 
 
 @app.websocket("/play")

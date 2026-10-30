@@ -14,10 +14,26 @@ from truco_bot.env.masking import get_action_mask
 from truco_bot.env.obs import get_observation
 
 
+def discover_agents(models_dir: Path = Path("models")) -> list[str]:
+    baselines = ["random", "heuristic", "equity"]
+    if not models_dir.is_dir():
+        return baselines
+    models = []
+    for p in models_dir.iterdir():
+        if "_step_" in p.name:
+            continue
+        if (p.suffix == ".bin" and (models_dir / f"{p.name}.done").is_file()) or (
+            p.suffix == ".pt" and p.is_file()
+        ):
+            models.append(p.stem)
+    return baselines + sorted(models)
+
+
 def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     low = name.lower()
+    s = seed if seed is not None else 42
     if low == "random":
-        return RandomAgent(seed=seed if seed is not None else 42)
+        return RandomAgent(seed=s)
     elif low == "heuristic":
         return HeuristicAgent()
     elif low == "equity":
@@ -25,18 +41,23 @@ def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     elif low == "mccfr_1000m":
         p = Path("models/mccfr_plus_1000M.bin")
         if p.is_file():
-            return NativeCFRAgent.from_checkpoint(p, seed=seed if seed is not None else 42)
-        return NativeCFRAgent(capacity=1024, seed=seed if seed is not None else 42)
-    else:
-        p = Path(name)
-        if p.is_file():
-            if p.suffix == ".pt":
-                from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
+            return NativeCFRAgent.from_checkpoint(p, seed=s)
+        raise ValueError(f"Unknown or unavailable agent: {name}")
 
-                return DeepCFRAgent.from_checkpoint(p, seed=seed if seed is not None else 42)
-            return NativeCFRAgent.from_checkpoint(p, seed=seed if seed is not None else 42)
-        # fallback to NativeCFRAgent
-        return NativeCFRAgent(capacity=1024, seed=seed if seed is not None else 42)
+    if ".." in name or "/" in name or "\\" in name or "_step_" in name:
+        raise ValueError(f"Unknown or unavailable agent: {name}")
+
+    if name in discover_agents():
+        bin_p = Path(f"models/{name}.bin")
+        if bin_p.is_file():
+            return NativeCFRAgent.from_checkpoint(bin_p, seed=s)
+        pt_p = Path(f"models/{name}.pt")
+        if pt_p.is_file():
+            from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
+
+            return DeepCFRAgent.from_checkpoint(pt_p, seed=s)
+
+    raise ValueError(f"Unknown or unavailable agent: {name}")
 
 
 class MatchSession:

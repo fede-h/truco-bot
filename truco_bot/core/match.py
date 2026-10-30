@@ -123,6 +123,14 @@ class TrucoMatch:
             {"player": p, "number": c.number, "suit": c.suit.name}
             for p, c in self.current_hand.trick_cards
         ]
+        # ponytail: pair consecutive played_cards so completed tricks survive trick_cards resets
+        tricks = [
+            [
+                {"player": p, "number": c.number, "suit": c.suit.name}
+                for p, c in self.current_hand.played_cards[i : i + 2]
+            ]
+            for i in range(0, len(self.current_hand.played_cards), 2)
+        ]
         legal_actions = (
             [a.name for a in get_legal_actions(self.current_hand)]
             if self.current_hand.active_player == player and not self.current_hand.is_hand_done
@@ -141,6 +149,7 @@ class TrucoMatch:
             "my_hand": my_cards,
             "opponent_card_count": opp_count,
             "table_cards": table_cards,
+            "tricks": tricks,
             "trick_results": list(self.current_hand.trick_results),
             "truco_level": self.current_hand.truco_level,
             "legal_actions": legal_actions,
