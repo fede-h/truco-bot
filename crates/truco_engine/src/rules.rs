@@ -94,7 +94,12 @@ pub fn resolve_hand(trick_results: &[i8], mano: u8) -> Option<u8> {
 }
 
 #[inline(always)]
-pub fn calculate_falta_envido_points(score_p0: u8, score_p1: u8, max_score: u8) -> u8 {
-    // ponytail: saturating sub prevents underflow when already at max score
-    max_score.saturating_sub(score_p0.max(score_p1))
+pub fn calculate_falta_envido_points(score_p0: u8, score_p1: u8, max_score: u8, winner: u8) -> u8 {
+    let malas_threshold = max_score / 2;
+    if score_p0 < malas_threshold && score_p1 < malas_threshold {
+        let winner_score = if winner == 0 { score_p0 } else { score_p1 };
+        max_score.saturating_sub(winner_score)
+    } else {
+        max_score.saturating_sub(score_p0.max(score_p1))
+    }
 }

@@ -212,7 +212,7 @@ def step(state: GameState, action: Action) -> GameState:
 
         if Action.FALTA_ENVIDO in new_state.envido_chain:
             pts = calculate_falta_envido_points(
-                new_state.score_p0, new_state.score_p1, new_state.max_score
+                new_state.score_p0, new_state.score_p1, new_state.max_score, winner=winner
             )
         else:
             pts = 0
@@ -283,15 +283,13 @@ def step(state: GameState, action: Action) -> GameState:
         return new_state
 
     if 0 <= action.value <= 5:  # PLAY_CARD
-        if not new_state.envido_resolved:
-            new_state.envido_resolved = True
-
         card_idx = action.value % 3
         card = new_state.hands[player].pop(card_idx)
         new_state.trick_cards.append((player, card))
         new_state.played_cards.append((player, card))
 
         if len(new_state.trick_cards) == 2:
+            new_state.envido_resolved = True
             p0_card = (
                 new_state.trick_cards[0][1]
                 if new_state.trick_cards[0][0] == 0

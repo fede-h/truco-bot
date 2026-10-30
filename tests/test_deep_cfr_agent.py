@@ -2,12 +2,12 @@
 
 from pathlib import Path
 
-from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
-from truco_bot.agents.deep_cfr.network import PolicyNetwork
 from truco_engine import BitboardState
 
 from truco_bot.agents.base import Agent
 from truco_bot.agents.baselines.random import RandomAgent
+from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
+from truco_bot.agents.deep_cfr.network import PolicyNetwork
 from truco_bot.core.actions import Action
 from truco_bot.core.card import ALL_CARDS
 from truco_bot.core.state import create_initial_hand_state, get_legal_actions

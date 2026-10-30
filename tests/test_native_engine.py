@@ -1,16 +1,22 @@
 """Integration tests comparing native compiled `truco_engine` against Python reference logic."""
 
 import time
+
 import pytest
 
 from truco_bot.core.actions import Action
-from truco_bot.core.card import ALL_CARDS, Card, Suit
+from truco_bot.core.card import ALL_CARDS, Card
 from truco_bot.core.rules import (
     calculate_envido as py_calculate_envido,
+)
+from truco_bot.core.rules import (
     compare_cards as py_compare_cards,
+)
+from truco_bot.core.rules import (
     resolve_hand as py_resolve_hand,
 )
-from truco_bot.core.state import create_initial_hand_state, get_legal_actions, step as py_step
+from truco_bot.core.state import create_initial_hand_state, get_legal_actions
+from truco_bot.core.state import step as py_step
 
 
 def get_native_engine():

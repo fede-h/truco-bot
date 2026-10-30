@@ -2,13 +2,13 @@
 
 import pytest
 import torch
+from truco_engine import BitboardState
+
+from truco_bot.agents.cfr.native_agent import gamestate_to_bitboard
 from truco_bot.agents.deep_cfr.encoder import (
     STATE_FEATURE_DIM,
     encode_state,
 )
-from truco_engine import BitboardState
-
-from truco_bot.agents.cfr.native_agent import gamestate_to_bitboard
 from truco_bot.core.actions import Action
 from truco_bot.core.card import Suit, create_card
 from truco_bot.core.state import create_initial_hand_state

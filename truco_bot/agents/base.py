@@ -10,4 +10,3 @@ class Agent(ABC):
 
     def reset(self) -> None:
         """Reset internal agent state between hands/matches."""
-        pass

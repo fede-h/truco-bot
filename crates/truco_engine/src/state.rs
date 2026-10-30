@@ -245,7 +245,7 @@ impl BitboardState {
             };
 
             let pts = if next.envido_chain[..next.envido_chain_len as usize].contains(&ACTION_FALTA_ENVIDO) {
-                calculate_falta_envido_points(next.score_p0, next.score_p1, next.max_score)
+                calculate_falta_envido_points(next.score_p0, next.score_p1, next.max_score, env_winner)
             } else {
                 let mut p = 0u8;
                 for &a in &next.envido_chain[..next.envido_chain_len as usize] {
@@ -341,7 +341,6 @@ impl BitboardState {
 
         // Card plays (0..5)
         if action <= 5 {
-            next.flags |= FLAG_ENVIDO_RESOLVED;
             let card_idx = (action % 3) as usize;
             let played_card = next.hands[player as usize][card_idx];
 
@@ -360,6 +359,7 @@ impl BitboardState {
                 next.trick_cards[0] = played_card;
                 next.active_player = other;
             } else {
+                next.flags |= FLAG_ENVIDO_RESOLVED;
                 next.trick_cards[1] = played_card;
                 let leader = next.trick_leader;
                 let p0_card = if leader == 0 {
