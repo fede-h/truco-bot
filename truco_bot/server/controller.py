@@ -78,6 +78,7 @@ class MatchSession:
         self.seed = seed
 
         self.match = TrucoMatch(target_score=target_score, seed=seed)
+        self._event_cursor = 0
 
         if mode == "human_vs_bot":
             self.bot_agent = instantiate_agent(bot_name, seed=seed)
@@ -156,6 +157,19 @@ class MatchSession:
 
     def get_view(self, player: int = 0) -> dict[str, Any]:
         return self.match.get_view(player)
+
+    @property
+    def events(self) -> list[dict[str, Any]]:
+        return self.match.events
+
+    def pop_events(self) -> list[dict[str, Any]]:
+        """Return only the events recorded since the previous WebSocket frame."""
+        events = self.match.events
+        if self._event_cursor > len(events):  # match was reset under us
+            self._event_cursor = 0
+        new_events = events[self._event_cursor :]
+        self._event_cursor = len(events)
+        return new_events
 
     @property
     def is_match_done(self) -> bool:

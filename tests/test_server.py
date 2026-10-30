@@ -343,3 +343,253 @@ class TestTicket14RetroConsoleAndAgents:
             assert "tricks" in msg["state"]
             assert isinstance(msg["state"]["tricks"], list)
 
+
+def _session_events(session: MatchSession) -> list[dict] | None:
+    """Return the event log wherever the implementation keeps it."""
+    events = getattr(session, "events", None)
+    if events is None:
+        events = getattr(session.match, "events", None)
+    return events
+
+
+class TestTicket15EventsAndBidding:
+    """Adversarial specification-driven tests for Ticket #15.
+
+    Ordered per-turn events, accurate envido rollout (including cards already
+    played in the current trick), exposed envido view fields, and the retro
+    bidding / speech-bubble UI.
+    """
+
+    # 1. Chronological per-turn events with the correct card payload
+    def test_websocket_events_chronological_order_and_card_payload(self):
+        client = TestClient(app)
+        with client.websocket_connect("/play") as ws:
+            ws.send_json(
+                {
+                    "type": "start",
+                    "mode": "human_vs_bot",
+                    "bot": "heuristic",
+                    "target_score": 30,
+                    "simulate_delay": False,
+                    "seed": 42,
+                }
+            )
+            initial = ws.receive_json()
+            assert initial["type"] == "state"
+            assert initial["state"]["mano"] == 0, "Human must be mano in hand 0"
+            assert "events" in initial, "Initial state frame must carry an events list"
+            assert isinstance(initial["events"], list)
+            assert initial["events"] == [], "No events before the human mano acts"
+
+            first_card = initial["state"]["my_hand"][0]
+            expected_num = first_card["number"]
+            expected_suit = first_card["suit"]
+
+            ws.send_json({"type": "action", "action": "PLAY_CARD_0"})
+            first_turn = ws.receive_json()
+            assert first_turn["type"] in ("state", "match_over")
+            assert "events" in first_turn
+            first_events = first_turn["events"]
+            assert isinstance(first_events, list)
+            assert len(first_events) >= 1
+
+            first_action_event = {
+                "player": 0,
+                "type": "action",
+                "action": "PLAY_CARD_0",
+                "card": {"number": expected_num, "suit": expected_suit},
+            }
+            assert first_events[0] == first_action_event, (
+                "First event must be the human's card play with the pre-pop card payload; "
+                f"got {first_events[0]!r}"
+            )
+
+            for event in first_events[1:]:
+                if event.get("type") == "envido_rollout":
+                    continue
+                assert event.get("player") == 1, (
+                    f"Bot actions must be attributed to player 1, got {event!r}"
+                )
+
+            # Second human turn: the frame must only carry this turn's events.
+            assert first_turn["type"] == "state", "Unexpected match_over on first hand"
+            second_state = first_turn["state"]
+            legal = second_state["legal_actions"]
+            assert legal, "Human should have a legal action on the next turn"
+            second_action = next(a for a in legal if not a.startswith("PLAY_CARD_DOWN"))
+            if second_action.startswith("PLAY_CARD_"):
+                idx = int(second_action.rsplit("_", 1)[1])
+                card = second_state["my_hand"][idx]
+                second_card = {"number": card["number"], "suit": card["suit"]}
+            else:
+                second_card = None
+
+            ws.send_json({"type": "action", "action": second_action})
+            second_turn = ws.receive_json()
+            assert second_turn["type"] in ("state", "match_over")
+            assert "events" in second_turn
+            second_events = second_turn["events"]
+            assert isinstance(second_events, list)
+            assert len(second_events) >= 1
+            assert second_events[0] == {
+                "player": 0,
+                "type": "action",
+                "action": second_action,
+                "card": second_card,
+            }, "Second frame leaked or reordered events from the previous turn"
+            assert first_action_event not in second_events, (
+                "Previous turn's events must not be replayed in the next frame"
+            )
+
+    # 2. Bot acting first as mano already produces events
+    def test_websocket_events_on_bot_mano_hand_start(self):
+        client = TestClient(app)
+        with client.websocket_connect("/play") as ws:
+            ws.send_json(
+                {
+                    "type": "start",
+                    "mode": "human_vs_bot",
+                    "bot": "heuristic",
+                    "target_score": 30,
+                    "simulate_delay": False,
+                    "seed": 42,
+                }
+            )
+            ws.receive_json()  # initial hand 0 frame
+
+            ws.send_json({"type": "next_hand"})
+            msg = ws.receive_json()
+            assert msg["type"] == "state"
+            assert msg["state"]["hand_index"] == 1
+            assert msg["state"]["mano"] == 1, "Bot must be mano in hand 1"
+            assert "events" in msg
+            assert isinstance(msg["events"], list)
+            assert len(msg["events"]) >= 1, "Bot mano start must record its first action"
+            assert msg["events"][0]["player"] == 1
+
+    # 3. Envido must count all three dealt cards, even one already on the table
+    def test_envido_rollout_event_and_pie_envido_after_mano_card_play(self):
+        card_map = {(c.number, c.suit.name): c for c in ALL_CARDS}
+        session = MatchSession(
+            mode="human_vs_human",
+            target_score=30,
+            simulate_delay=False,
+            seed=42,
+        )
+        session.match.current_hand = create_initial_hand_state(
+            hands=[
+                [
+                    card_map[(7, "ESPADAS")],
+                    card_map[(6, "ESPADAS")],
+                    card_map[(4, "COPAS")],
+                ],
+                [
+                    card_map[(7, "OROS")],
+                    card_map[(5, "OROS")],
+                    card_map[(4, "BASTOS")],
+                ],
+            ],
+            mano=0,
+            score_p0=0,
+            score_p1=0,
+            max_score=30,
+        )
+
+        # Mano (P0) plays a card; its 7 ESPADAS leaves the hand before the envido.
+        session.step_action(Action.PLAY_CARD_0)
+        # Pie (P1) calls Envido, mano accepts.
+        session.step_action(Action.ENVIDO)
+        session.step_action(Action.QUIERO_ENVIDO)
+
+        events = _session_events(session)
+        assert events is not None, "Session must record an ordered events list"
+
+        rollouts = [e for e in events if e.get("type") == "envido_rollout"]
+        assert rollouts, f"Missing envido_rollout event in {events!r}"
+        rollout = rollouts[-1]
+        assert rollout["mano_player"] == 0
+        assert rollout["mano_points"] == 33, (
+            "Mano envido must count all 3 dealt cards (7+6+20), not just unplayed ones"
+        )
+        assert rollout["pie_player"] == 1
+        assert rollout["pie_points"] == 32
+        assert rollout["winner"] == 0
+        assert rollout["points_awarded"] == 2
+        assert session.match.state.match_score_p0 == 2, (
+            "Envido winner must be P0 with 2 points, not P1 from a truncated hand"
+        )
+
+    # 4. Envido view fields, without leaking a human envido helper
+    def test_get_view_envido_fields_and_no_human_envido_helper(self):
+        session = MatchSession(
+            mode="human_vs_bot",
+            bot_name="heuristic",
+            target_score=30,
+            simulate_delay=False,
+            seed=42,
+        )
+        view = session.get_view(0)
+
+        assert "envido_pending" in view
+        assert isinstance(view["envido_pending"], bool)
+        assert "envido_chain" in view
+        assert isinstance(view["envido_chain"], list)
+        assert all(isinstance(call, str) for call in view["envido_chain"])
+        assert "envido_winner" in view
+        assert view["envido_winner"] is None or isinstance(view["envido_winner"], int)
+        assert "envido_points_won" in view
+        assert isinstance(view["envido_points_won"], int)
+
+        for forbidden in ("my_envido", "human_envido", "player_envido"):
+            assert forbidden not in view, (
+                f"get_view(0) must not leak the human's own envido total ({forbidden})"
+            )
+
+    # 5. Retro bidding UI, Rioplatense speech bubbles, 600 ms pacing
+    def test_static_ui_bidding_labels_speech_bubbles_and_600ms_pacing(self):
+        client = TestClient(app)
+        index_res = client.get("/")
+        js_res = client.get("/static/game.js")
+        css_res = client.get("/static/style.css")
+
+        assert index_res.status_code == 200
+        assert js_res.status_code == 200
+        assert css_res.status_code == 200
+
+        js = js_res.text
+        css = css_res.text
+
+        for label in (
+            "Envido",
+            "Real Envido",
+            "Falta Envido",
+            "Truco",
+            "Retruco",
+            "Vale 4",
+            "Quiero",
+            "No Quiero",
+            "Al Mazo",
+        ):
+            assert label in js, f"Missing bidding button label: {label}"
+
+        for bubble in (
+            "¡ENVIDO!",
+            "¡REAL ENVIDO!",
+            "¡FALTA ENVIDO!",
+            "¡TRUCO!",
+            "¡RETRUCO!",
+            "¡VALE CUATRO!",
+            "¡QUIERO!",
+            "¡NO QUIERO!",
+            "Me voy al mazo",
+            "Tengo ",
+            "Son buenas",
+            "¡Y son mejores!",
+        ):
+            assert bubble in js, f"Missing Rioplatense speech bubble text: {bubble}"
+
+        assert re.search(r"\b600\b", js), "Event replay must be paced at 600 ms"
+        assert "PLAY_CARD_DOWN" not in js, "The client must never expose PLAY_CARD_DOWN"
+
+        assert "#f2ead3" in css, "Speech bubbles need the cream #f2ead3 fill"
+

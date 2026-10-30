@@ -52,6 +52,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                     {
                         "type": "state",
                         "state": session.get_view(player=0),
+                        "events": session.pop_events(),
                     }
                 )
 
@@ -70,6 +71,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                                 session.match.state.match_score_p0,
                                 session.match.state.match_score_p1,
                             ],
+                            "events": session.pop_events(),
                         }
                     )
                 else:
@@ -79,6 +81,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                         {
                             "type": "state",
                             "state": session.get_view(player=0),
+                            "events": session.pop_events(),
                         }
                     )
 
@@ -92,6 +95,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                     {
                         "type": "state",
                         "state": session.get_view(player=0),
+                        "events": session.pop_events(),
                     }
                 )
 
@@ -110,6 +114,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                                 session.match.state.match_score_p0,
                                 session.match.state.match_score_p1,
                             ],
+                            "events": session.pop_events(),
                         }
                     )
                 else:
@@ -117,6 +122,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                         {
                             "type": "state",
                             "state": session.get_view(player=0),
+                            "events": session.pop_events(),
                         }
                     )
 

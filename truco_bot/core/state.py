@@ -206,8 +206,11 @@ def step(state: GameState, action: Action) -> GameState:
             other_player if len(new_state.trick_cards) % 2 == 1 else new_state.trick_leader
         )
 
-        envido_p0 = calculate_envido(new_state.hands[0])
-        envido_p1 = calculate_envido(new_state.hands[1])
+        # ponytail: Envido counts all 3 dealt cards, including any card already played in Trick 1
+        full_hand_p0 = new_state.hands[0] + [c for p, c in new_state.played_cards if p == 0]
+        full_hand_p1 = new_state.hands[1] + [c for p, c in new_state.played_cards if p == 1]
+        envido_p0 = calculate_envido(full_hand_p0)
+        envido_p1 = calculate_envido(full_hand_p1)
         winner = 0 if envido_p0 > envido_p1 else (1 if envido_p1 > envido_p0 else new_state.mano)
 
         if Action.FALTA_ENVIDO in new_state.envido_chain:
