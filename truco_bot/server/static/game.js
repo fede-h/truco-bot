@@ -243,16 +243,13 @@ function connectWebSocket(bot, targetScore) {
   };
 
   ws.onmessage = async (event) => {
-    const msg = JSON.parse(event.data);
-    const prevState = currentState;
-    if (msg.events && msg.events.length > 0) {
-      await processEvents(msg.events, prevState, msg.state || prevState);
+    const startBtn = document.getElementById("start-btn");
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.textContent = "JUGAR";
     }
-    if (msg.type === "state") {
-      await renderState(msg.state);
-    } else if (msg.type === "match_over") {
-      showMatchOver(msg.winner, msg.final_score);
-    } else if (msg.type === "error") {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "error") {
       console.error("Server error:", msg.message);
       const errEl = document.getElementById("menu-error");
       if (errEl) {
@@ -261,6 +258,18 @@ function connectWebSocket(bot, targetScore) {
       }
       document.getElementById("table-screen").classList.add("hidden");
       document.getElementById("menu-screen").classList.remove("hidden");
+      return;
+    }
+    document.getElementById("menu-screen").classList.add("hidden");
+    document.getElementById("table-screen").classList.remove("hidden");
+    const prevState = currentState;
+    if (msg.events && msg.events.length > 0) {
+      await processEvents(msg.events, prevState, msg.state || prevState);
+    }
+    if (msg.type === "state") {
+      await renderState(msg.state);
+    } else if (msg.type === "match_over") {
+      showMatchOver(msg.winner, msg.final_score);
     }
   };
 }
@@ -401,9 +410,12 @@ document.getElementById("start-btn").onclick = () => {
     document.querySelector('input[name="target_score"]:checked').value,
     10
   );
+  const startBtn = document.getElementById("start-btn");
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.textContent = "CARGANDO...";
+  }
   document.getElementById("match-over-overlay").classList.add("hidden");
-  document.getElementById("menu-screen").classList.add("hidden");
-  document.getElementById("table-screen").classList.remove("hidden");
   connectWebSocket(bot, targetScore);
 };
 

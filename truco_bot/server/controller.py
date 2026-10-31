@@ -29,6 +29,18 @@ def discover_agents(models_dir: Path = Path("models")) -> list[str]:
     return baselines + sorted(models)
 
 
+# ponytail: cache loaded checkpoint tables by path so starting a match doesn't re-read 1.4GB .bin
+_AGENT_CACHE: dict[Path, Any] = {}
+
+
+def _load_cached_cfr(path: Path, seed: int) -> NativeCFRAgent:
+    agent = _AGENT_CACHE.get(path)
+    if agent is None:
+        agent = NativeCFRAgent.from_checkpoint(path, seed=seed)
+        _AGENT_CACHE[path] = agent
+    return NativeCFRAgent(table=agent.table, seed=seed, capacity=agent.capacity)
+
+
 def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     low = name.lower()
     agent_seed = seed if seed is not None else 42
@@ -41,7 +53,7 @@ def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     elif low == "mccfr_1000m":
         p = Path("models/mccfr_plus_1000M.bin")
         if p.is_file():
-            return NativeCFRAgent.from_checkpoint(p, seed=agent_seed)
+            return _load_cached_cfr(p, agent_seed)
         raise ValueError(f"Unknown or unavailable agent: {name}")
 
     if ".." in name or "/" in name or "\\" in name or "_step_" in name:
@@ -50,7 +62,7 @@ def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     if name in discover_agents():
         bin_p = Path(f"models/{name}.bin")
         if bin_p.is_file():
-            return NativeCFRAgent.from_checkpoint(bin_p, seed=agent_seed)
+            return _load_cached_cfr(bin_p, agent_seed)
         pt_p = Path(f"models/{name}.pt")
         if pt_p.is_file():
             from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
