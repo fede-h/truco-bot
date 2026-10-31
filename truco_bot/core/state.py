@@ -76,6 +76,7 @@ _TRUCO_RESPONSES_1: list[Action] = [
     Action.QUIERO_TRUCO,
     Action.NO_QUIERO_TRUCO,
     Action.IR_AL_MAZO,
+    Action.RETRUCO,
 ]
 _TRUCO_RESPONSES_2: list[Action] = [
     Action.QUIERO_TRUCO,
@@ -268,7 +269,9 @@ def step(state: GameState, action: Action) -> GameState:
         new_state.pending_truco_from = other_player
         new_state.truco_caller = player
         new_state.active_player = other_player
-        if action == Action.VALE_CUATRO:
+        if action == Action.RETRUCO:
+            new_state.truco_level = 2
+        elif action == Action.VALE_CUATRO:
             new_state.truco_level = 3
         if not new_state.envido_resolved:
             new_state.envido_resolved = True

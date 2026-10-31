@@ -209,6 +209,8 @@ class TrucoMatch:
             "tricks": tricks,
             "trick_results": list(self.current_hand.trick_results),
             "truco_level": self.current_hand.truco_level,
+            "truco_pending": self.current_hand.pending_truco_response,
+            "truco_caller": self.current_hand.truco_caller,
             "legal_actions": legal_actions,
             "envido_pending": self.current_hand.pending_envido_response,
             "envido_chain": [a.name for a in self.current_hand.envido_chain],

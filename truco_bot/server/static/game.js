@@ -2,6 +2,8 @@ let ws = null;
 let currentState = null;
 let isReplaying = false;
 
+const BOT_ACTION_DELAY_MS = 1000;
+
 const ACTION_LABELS = {
   ENVIDO: "Envido",
   REAL_ENVIDO: "Real Envido",
@@ -50,41 +52,158 @@ function cardUrl(card) {
 
 const bubbleTimers = { 0: null, 1: null };
 
-function showBubble(player, text, durationMs = 1200) {
+function showBubble(player, text, durationMs = 1000) {
   const id = player === 0 ? "human-bubble" : "bot-bubble";
   const el = document.getElementById(id);
   if (!el) return;
   if (bubbleTimers[player]) {
     clearTimeout(bubbleTimers[player]);
+    bubbleTimers[player] = null;
   }
   el.textContent = text;
   el.classList.remove("hidden");
-  bubbleTimers[player] = setTimeout(() => el.classList.add("hidden"), durationMs);
+  if (durationMs !== null) {
+    bubbleTimers[player] = setTimeout(() => el.classList.add("hidden"), durationMs);
+  }
+}
+
+function hideBubble(player) {
+  const id = player === 0 ? "human-bubble" : "bot-bubble";
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (bubbleTimers[player]) {
+    clearTimeout(bubbleTimers[player]);
+    bubbleTimers[player] = null;
+  }
+  el.classList.add("hidden");
+}
+
+function syncPendingBotBubble(state) {
+  if (!state) return;
+  if (state.envido_pending && state.active_player === 0 && state.envido_chain && state.envido_chain.length > 0) {
+    const lastCall = state.envido_chain[state.envido_chain.length - 1];
+    const text = SPEECH_CALLS[lastCall] || lastCall;
+    showBubble(1, text, null);
+    return;
+  }
+  if (state.truco_pending && state.active_player === 0) {
+    const trucoCall =
+      state.truco_level === 1
+        ? "TRUCO"
+        : state.truco_level === 2
+        ? "RETRUCO"
+        : "VALE_CUATRO";
+    showBubble(1, SPEECH_CALLS[trucoCall], null);
+    return;
+  }
+  if (!bubbleTimers[1]) {
+    hideBubble(1);
+  }
+}
+
+function cloneState(s) {
+  return s ? JSON.parse(JSON.stringify(s)) : null;
+}
+
+function buildPreBotState(prevState, finalState, events) {
+  const s = cloneState(finalState);
+  if (!s) return null;
+  s.legal_actions = [];
+
+  const botCardsPlayed = events.filter(
+    (e) => e.type === "action" && e.player === 1 && e.card
+  ).length;
+  if (botCardsPlayed > 0) {
+    s.opponent_card_count = (finalState.opponent_card_count || 0) + botCardsPlayed;
+    s.tricks = prevState && prevState.tricks ? cloneState(prevState.tricks) : [];
+    s.trick_results =
+      prevState && prevState.trick_results ? cloneState(prevState.trick_results) : [];
+  }
+
+  events.forEach((ev) => {
+    if (ev.type === "action" && ev.player === 0 && ev.card) {
+      if (!s.tricks.length || s.tricks[s.tricks.length - 1].length === 2) {
+        s.tricks.push([]);
+      }
+      s.tricks[s.tricks.length - 1].push({
+        player: 0,
+        number: ev.card.number,
+        suit: ev.card.suit,
+      });
+    }
+  });
+  return s;
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function processEvents(events) {
+async function processEvents(events, prevState, finalState) {
   if (!events || events.length === 0) return;
   isReplaying = true;
+
+  let workingState = buildPreBotState(prevState, finalState, events);
+  if (workingState) {
+    renderBoard(workingState);
+  }
+
   for (const ev of events) {
     if (ev.type === "action") {
-      const text = SPEECH_CALLS[ev.action];
-      if (text) {
-        showBubble(ev.player, text, 1000);
-      }
-      if (ev.player === 1) {
-        await sleep(600);
+      if (ev.player === 0) {
+        hideBubble(1);
+        const text = SPEECH_CALLS[ev.action];
+        if (text) {
+          showBubble(0, text, 1000);
+        }
+      } else {
+        // Every bot action takes 1 second (1000 ms)
+        await sleep(BOT_ACTION_DELAY_MS);
+        const text = SPEECH_CALLS[ev.action];
+        if (text) {
+          const isPendingShout =
+            ev.action === "ENVIDO" ||
+            ev.action === "REAL_ENVIDO" ||
+            ev.action === "FALTA_ENVIDO" ||
+            ev.action === "TRUCO" ||
+            ev.action === "RETRUCO" ||
+            ev.action === "VALE_CUATRO";
+          showBubble(1, text, isPendingShout ? null : 1000);
+        } else if (ev.card && workingState) {
+          if (
+            !workingState.tricks.length ||
+            workingState.tricks[workingState.tricks.length - 1].length === 2
+          ) {
+            workingState.tricks.push([]);
+          }
+          workingState.tricks[workingState.tricks.length - 1].push({
+            player: 1,
+            number: ev.card.number,
+            suit: ev.card.suit,
+          });
+          workingState.opponent_card_count = Math.max(
+            0,
+            workingState.opponent_card_count - 1
+          );
+          const doneIdx = workingState.tricks.length - 1;
+          if (
+            workingState.tricks[doneIdx].length === 2 &&
+            finalState &&
+            finalState.trick_results &&
+            finalState.trick_results[doneIdx] !== undefined
+          ) {
+            workingState.trick_results[doneIdx] = finalState.trick_results[doneIdx];
+          }
+          renderBoard(workingState);
+        }
       }
     } else if (ev.type === "envido_rollout") {
-      showBubble(ev.mano_player, "Tengo " + ev.mano_points, 1200);
-      await sleep(600);
+      showBubble(ev.mano_player, "Tengo " + ev.mano_points, 1000);
+      await sleep(BOT_ACTION_DELAY_MS);
       const pieText =
         ev.winner === ev.pie_player
           ? "¡Y son mejores! (" + ev.pie_points + ")"
           : "Son buenas";
-      showBubble(ev.pie_player, pieText, 1200);
-      await sleep(600);
+      showBubble(ev.pie_player, pieText, 1000);
+      await sleep(BOT_ACTION_DELAY_MS);
     }
   }
   isReplaying = false;
@@ -125,8 +244,9 @@ function connectWebSocket(bot, targetScore) {
 
   ws.onmessage = async (event) => {
     const msg = JSON.parse(event.data);
+    const prevState = currentState;
     if (msg.events && msg.events.length > 0) {
-      await processEvents(msg.events);
+      await processEvents(msg.events, prevState, msg.state || prevState);
     }
     if (msg.type === "state") {
       await renderState(msg.state);
@@ -145,9 +265,7 @@ function connectWebSocket(bot, targetScore) {
   };
 }
 
-async function renderState(state) {
-  currentState = state;
-
+function renderBoard(state) {
   document.getElementById("score-vos").textContent = state.match_score[0];
   document.getElementById("score-bot").textContent = state.match_score[1];
   const half = state.target_score / 2;
@@ -157,7 +275,6 @@ async function renderState(state) {
     : "MALAS";
   document.getElementById("badge-mano").textContent =
     state.mano === 0 ? "TU MANO" : "MANO BOT";
-  document.getElementById("hud-truco-level").textContent = state.truco_level;
 
   // Bot hand: revealed opponent cards face-up, rest face-down
   const botHand = document.getElementById("bot-hand");
@@ -169,7 +286,10 @@ async function renderState(state) {
     img.className = "card-sprite";
     botHand.appendChild(img);
   });
-  const unrevealedCount = Math.max(0, state.opponent_card_count - revealed.length);
+  const unrevealedCount = Math.max(
+    0,
+    state.opponent_card_count - revealed.length
+  );
   for (let i = 0; i < unrevealedCount; i++) {
     const img = document.createElement("img");
     img.src = "/static/cards/back.png";
@@ -177,7 +297,7 @@ async function renderState(state) {
     botHand.appendChild(img);
   }
 
-  // Tricks
+  // Tricks: cards stacked one on top of another with slight margin, winner on top
   for (let t = 0; t < 3; t++) {
     const slot = document.getElementById(`trick-${t}`);
     const cardsDiv = slot.querySelector(".trick-cards");
@@ -185,17 +305,25 @@ async function renderState(state) {
     cardsDiv.innerHTML = "";
     badge.textContent = "";
 
+    const res =
+      state.trick_results && state.trick_results[t] !== undefined
+        ? state.trick_results[t]
+        : undefined;
+    const winningPlayer = res === 1 ? 0 : res === -1 ? 1 : null;
+
     if (state.tricks && state.tricks[t]) {
-      state.tricks[t].forEach((c) => {
+      state.tricks[t].forEach((c, idx) => {
         const img = document.createElement("img");
         img.src = cardUrl(c);
-        img.className = "card-sprite";
+        img.className = `card-sprite ${idx === 0 ? "card-first" : "card-second"}`;
+        if (winningPlayer !== null && c.player === winningPlayer) {
+          img.classList.add("card-winner");
+        }
         cardsDiv.appendChild(img);
       });
     }
 
-    if (state.trick_results && state.trick_results[t] !== undefined) {
-      const res = state.trick_results[t];
+    if (res !== undefined) {
       badge.textContent = res === 1 ? "VOS" : res === -1 ? "BOT" : "PARDA";
     }
   }
@@ -236,6 +364,12 @@ async function renderState(state) {
     };
     actionBar.appendChild(btn);
   });
+}
+
+async function renderState(state) {
+  currentState = state;
+  renderBoard(state);
+  syncPendingBotBubble(state);
 
   if (state.is_match_done) {
     showMatchOver(state.match_winner, state.match_score);
@@ -243,10 +377,16 @@ async function renderState(state) {
   }
 
   if (state.is_hand_done) {
-    if (state.hand_winner !== null && state.hand_winner !== undefined && state.hand_points_won > 0) {
+    if (
+      state.hand_winner !== null &&
+      state.hand_winner !== undefined &&
+      state.hand_points_won > 0
+    ) {
       showBubble(state.hand_winner, `+${state.hand_points_won}`, 2000);
     }
     await sleep(2000);
+    hideBubble(0);
+    hideBubble(1);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "next_hand" }));
     }

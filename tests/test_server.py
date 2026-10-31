@@ -588,10 +588,59 @@ class TestTicket15EventsAndBidding:
         ):
             assert bubble in js, f"Missing Rioplatense speech bubble text: {bubble}"
 
-        assert re.search(r"\b600\b", js), "Event replay must be paced at 600 ms"
+        assert re.search(r"\b1000\b", js), "All agent actions must be paced at 1000 ms (1 second)"
         assert "PLAY_CARD_DOWN" not in js, "The client must never expose PLAY_CARD_DOWN"
+        assert "hud-truco-level" not in index_res.text, (
+            "The upper-right Truco indicator must be removed from the HUD"
+        )
+        assert ".card-winner" in css and "z-index" in css, (
+            "Trick cards must be stacked with the winning card on top"
+        )
 
         assert "#f2ead3" in css, "Speech bubbles need the cream #f2ead3 fill"
+
+    def test_retruco_and_vale_cuatro_escalation_and_resolution_flow(self):
+        """Verify Truco -> Retruco -> Vale Cuatro -> Quiero/No Quiero flow lets play continue until resolved."""
+        session = MatchSession(
+            mode="human_vs_human",
+            target_score=30,
+            simulate_delay=False,
+            seed=42,
+        )
+        # P0 calls TRUCO
+        session.step_action(Action.TRUCO)
+        view_p1 = session.get_view(1)
+        assert view_p1["truco_pending"] is True
+        assert "RETRUCO" in view_p1["legal_actions"], (
+            "Player facing TRUCO must be able to raise to RETRUCO immediately"
+        )
+
+        # P1 raises to RETRUCO
+        session.step_action(Action.RETRUCO)
+        view_p0 = session.get_view(0)
+        assert view_p0["truco_pending"] is True
+        assert view_p0["truco_level"] == 2
+        assert "VALE_CUATRO" in view_p0["legal_actions"], (
+            "Player facing RETRUCO must be able to raise to VALE_CUATRO immediately"
+        )
+        assert "QUIERO_TRUCO" in view_p0["legal_actions"]
+
+        # P0 raises to VALE_CUATRO
+        session.step_action(Action.VALE_CUATRO)
+        view_p1_vc = session.get_view(1)
+        assert view_p1_vc["truco_pending"] is True
+        assert view_p1_vc["truco_level"] == 3
+        assert "QUIERO_TRUCO" in view_p1_vc["legal_actions"]
+        assert "NO_QUIERO_TRUCO" in view_p1_vc["legal_actions"]
+
+        # P1 accepts VALE_CUATRO -> truco_level becomes 4, pending clears, and card play resumes!
+        session.step_action(Action.QUIERO_TRUCO)
+        view_after_quiero = session.get_view(0)
+        assert view_after_quiero["truco_pending"] is False
+        assert view_after_quiero["truco_level"] == 4
+        assert "PLAY_CARD_0" in view_after_quiero["legal_actions"], (
+            "After VALE_CUATRO is accepted, card play must resume normally"
+        )
 
 
 class TestTicket16HandOverRevealAndMatchEnd:
