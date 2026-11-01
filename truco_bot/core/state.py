@@ -76,6 +76,7 @@ _TRUCO_RESPONSES_1: list[Action] = [
     Action.QUIERO_TRUCO,
     Action.NO_QUIERO_TRUCO,
     Action.IR_AL_MAZO,
+    Action.RETRUCO,
 ]
 _TRUCO_RESPONSES_2: list[Action] = [
     Action.QUIERO_TRUCO,
@@ -180,6 +181,11 @@ def _clone_state(state: GameState) -> GameState:
     )
 
 
+def dealt_hand(state: GameState, player: int) -> list[Card]:
+    """Return all 3 cards originally dealt to `player` in this hand."""
+    return state.hands[player] + [c for p, c in state.played_cards if p == player]
+
+
 def step(state: GameState, action: Action) -> GameState:
     new_state = _clone_state(state)
     player = new_state.active_player
@@ -206,8 +212,9 @@ def step(state: GameState, action: Action) -> GameState:
             other_player if len(new_state.trick_cards) % 2 == 1 else new_state.trick_leader
         )
 
-        envido_p0 = calculate_envido(new_state.hands[0])
-        envido_p1 = calculate_envido(new_state.hands[1])
+        # ponytail: Envido counts all 3 dealt cards, including any card already played in Trick 1
+        envido_p0 = calculate_envido(dealt_hand(new_state, 0))
+        envido_p1 = calculate_envido(dealt_hand(new_state, 1))
         winner = 0 if envido_p0 > envido_p1 else (1 if envido_p1 > envido_p0 else new_state.mano)
 
         if Action.FALTA_ENVIDO in new_state.envido_chain:
@@ -262,7 +269,9 @@ def step(state: GameState, action: Action) -> GameState:
         new_state.pending_truco_from = other_player
         new_state.truco_caller = player
         new_state.active_player = other_player
-        if action == Action.VALE_CUATRO:
+        if action == Action.RETRUCO:
+            new_state.truco_level = 2
+        elif action == Action.VALE_CUATRO:
             new_state.truco_level = 3
         if not new_state.envido_resolved:
             new_state.envido_resolved = True

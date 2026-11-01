@@ -3,7 +3,13 @@ from typing import Any
 
 from truco_bot.core.actions import Action
 from truco_bot.core.deck import deal
-from truco_bot.core.state import GameState, create_initial_hand_state, get_legal_actions
+from truco_bot.core.rules import calculate_envido, get_envido_cards
+from truco_bot.core.state import (
+    GameState,
+    create_initial_hand_state,
+    dealt_hand,
+    get_legal_actions,
+)
 from truco_bot.core.state import step as core_step
 
 
@@ -23,11 +29,13 @@ class TrucoMatch:
         self.state = MatchState(target_score=target_score)
         self.seed = seed
         self.current_hand: GameState | None = None
+        self.events: list[dict[str, Any]] = []
         self.reset(seed=seed)
 
     def reset(self, seed: int | None = None) -> MatchState:
         if seed is not None:
             self.seed = seed
+        self.events = []
         self.state = MatchState(
             target_score=self.state.target_score,
             match_score_p0=0,
@@ -59,6 +67,16 @@ class TrucoMatch:
         if self.current_hand is None or self.current_hand.is_hand_done:
             raise RuntimeError("Hand is done; call next_hand() before calling step().")
 
+        acting_player = self.current_hand.active_player
+        card_payload = None
+        if 0 <= action.value <= 5:
+            c = self.current_hand.hands[acting_player][action.value % 3]
+            card_payload = {"number": c.number, "suit": c.suit.name}
+
+        self.events.append(
+            {"player": acting_player, "type": "action", "action": action.name, "card": card_payload}
+        )
+
         p0_before = self.current_hand.score_p0
         p1_before = self.current_hand.score_p1
 
@@ -66,6 +84,24 @@ class TrucoMatch:
 
         delta_p0 = self.current_hand.score_p0 - p0_before
         delta_p1 = self.current_hand.score_p1 - p1_before
+
+        if action == Action.QUIERO_ENVIDO:
+            mano = self.state.mano
+            pie = 1 - mano
+            pts_mano = calculate_envido(dealt_hand(self.current_hand, mano))
+            pts_pie = calculate_envido(dealt_hand(self.current_hand, pie))
+            winner = 0 if self.current_hand.score_p0 > p0_before else 1
+            self.events.append(
+                {
+                    "type": "envido_rollout",
+                    "mano_player": mano,
+                    "mano_points": pts_mano,
+                    "pie_player": pie,
+                    "pie_points": pts_pie,
+                    "winner": winner,
+                    "points_awarded": delta_p0 + delta_p1,
+                }
+            )
 
         if delta_p0 > 0:
             self.state.match_score_p0 += delta_p0
@@ -123,11 +159,37 @@ class TrucoMatch:
             {"player": p, "number": c.number, "suit": c.suit.name}
             for p, c in self.current_hand.trick_cards
         ]
+        # ponytail: pair consecutive played_cards so completed tricks survive trick_cards resets
+        tricks = [
+            [
+                {"player": p, "number": c.number, "suit": c.suit.name}
+                for p, c in self.current_hand.played_cards[i : i + 2]
+            ]
+            for i in range(0, len(self.current_hand.played_cards), 2)
+        ]
         legal_actions = (
             [a.name for a in get_legal_actions(self.current_hand)]
             if self.current_hand.active_player == player and not self.current_hand.is_hand_done
             else []
         )
+
+        # ponytail: revealed opponent cards only for winner of accepted envido
+        revealed_opp_cards = []
+        opp = 1 - player
+        opp_won_envido = (opp == 0 and self.current_hand.score_p0 > 0) or (
+            opp == 1 and self.current_hand.score_p1 > 0
+        )
+        if (
+            self.current_hand.is_hand_done
+            and Action.QUIERO_ENVIDO in self.current_hand.envido_chain
+            and opp_won_envido
+        ):
+            env_cards = get_envido_cards(dealt_hand(self.current_hand, opp))
+            revealed_opp_cards = [
+                {"number": c.number, "suit": c.suit.name}
+                for c in env_cards
+                if c in self.current_hand.hands[opp]
+            ]
 
         return {
             "match_score": (self.state.match_score_p0, self.state.match_score_p1),
@@ -138,12 +200,26 @@ class TrucoMatch:
             "is_hand_done": self.current_hand.is_hand_done,
             "is_match_done": self.state.is_match_done,
             "match_winner": self.state.match_winner,
+            "hand_winner": self.current_hand.winner,
+            "hand_points_won": self.current_hand.points_won,
+            "revealed_opponent_cards": revealed_opp_cards,
             "my_hand": my_cards,
             "opponent_card_count": opp_count,
             "table_cards": table_cards,
+            "tricks": tricks,
             "trick_results": list(self.current_hand.trick_results),
             "truco_level": self.current_hand.truco_level,
+            "truco_pending": self.current_hand.pending_truco_response,
+            "truco_caller": self.current_hand.truco_caller,
             "legal_actions": legal_actions,
+            "envido_pending": self.current_hand.pending_envido_response,
+            "envido_chain": [a.name for a in self.current_hand.envido_chain],
+            "envido_winner": (
+                0
+                if self.current_hand.score_p0 > 0
+                else (1 if self.current_hand.score_p1 > 0 else None)
+            ),
+            "envido_points_won": max(self.current_hand.score_p0, self.current_hand.score_p1),
         }
 
     @property

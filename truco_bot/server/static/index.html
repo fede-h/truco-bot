@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRUCO - Shady Console</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="crt-overlay"></div>
+  <div id="game-container">
+    <!-- MENU SCREEN -->
+    <div id="menu-screen" class="screen">
+      <h1 class="pixel-title">TRUCO</h1>
+      <div class="menu-box">
+        <div class="field">
+          <label for="agent-select">OPONENTE:</label>
+          <select id="agent-select"></select>
+        </div>
+        <div class="field">
+          <label>OBJETIVO:</label>
+          <div class="radio-group">
+            <label><input type="radio" name="target_score" value="15" checked> 15</label>
+            <label><input type="radio" name="target_score" value="30"> 30</label>
+          </div>
+        </div>
+        <button id="start-btn" class="pixel-btn btn-primary">JUGAR</button>
+        <div id="menu-error" class="menu-error hidden" role="alert"></div>
+      </div>
+      <footer class="footer-credit">
+        Spanish Deck – Pixel Art by jcanabal
+      </footer>
+    </div>
+
+    <!-- TABLE SCREEN -->
+    <div id="table-screen" class="screen hidden">
+      <!-- HUD -->
+      <div id="hud">
+        <div class="hud-item"><span class="hud-label">VOS:</span> <span id="score-vos" class="hud-val">0</span></div>
+        <div class="hud-item"><span class="hud-label">BOT:</span> <span id="score-bot" class="hud-val">0</span></div>
+        <div class="hud-item"><span id="badge-score" class="badge">MALAS</span></div>
+        <div class="hud-item"><span id="badge-mano" class="badge">MANO</span></div>
+      </div>
+
+      <!-- BOT HAND -->
+      <div id="bot-bubble" class="speech-bubble hidden"></div>
+      <div id="bot-hand" class="cards-row"></div>
+
+      <!-- TABLE FELT & TRICKS -->
+      <div id="table-felt">
+        <div id="tricks-area">
+          <div id="trick-0" class="trick-slot">
+            <div class="trick-cards"></div>
+            <div class="trick-badge"></div>
+          </div>
+          <div id="trick-1" class="trick-slot">
+            <div class="trick-cards"></div>
+            <div class="trick-badge"></div>
+          </div>
+          <div id="trick-2" class="trick-slot">
+            <div class="trick-cards"></div>
+            <div class="trick-badge"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HUMAN HAND -->
+      <div id="human-bubble" class="speech-bubble hidden"></div>
+      <div id="human-hand" class="cards-row"></div>
+
+      <!-- ACTION BAR -->
+      <div id="action-bar"></div>
+
+      <!-- MATCH OVER OVERLAY -->
+      <div id="match-over-overlay" class="overlay hidden">
+        <div class="overlay-box">
+          <h2 id="match-over-title"></h2>
+          <div id="match-over-score" class="overlay-score"></div>
+          <div class="overlay-buttons">
+            <button id="revancha-btn" class="pixel-btn btn-primary">REVANCHA</button>
+            <button id="menu-btn" class="pixel-btn">CAMBIAR AGENTE</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/game.js"></script>
+</body>
+</html>
