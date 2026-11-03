@@ -14,10 +14,38 @@ from truco_bot.env.masking import get_action_mask
 from truco_bot.env.obs import get_observation
 
 
+def discover_agents(models_dir: Path = Path("models")) -> list[str]:
+    baselines = ["random", "heuristic", "equity"]
+    if not models_dir.is_dir():
+        return baselines
+    models = []
+    for p in models_dir.iterdir():
+        if "_step_" in p.name:
+            continue
+        if (p.suffix == ".bin" and (models_dir / f"{p.name}.done").is_file()) or (
+            p.suffix == ".pt" and p.is_file()
+        ):
+            models.append(p.stem)
+    return baselines + sorted(models)
+
+
+# ponytail: cache loaded checkpoint tables by path so starting a match doesn't re-read 1.4GB .bin
+_AGENT_CACHE: dict[Path, Any] = {}
+
+
+def _load_cached_cfr(path: Path, seed: int) -> NativeCFRAgent:
+    agent = _AGENT_CACHE.get(path)
+    if agent is None:
+        agent = NativeCFRAgent.from_checkpoint(path, seed=seed)
+        _AGENT_CACHE[path] = agent
+    return NativeCFRAgent(table=agent.table, seed=seed, capacity=agent.capacity)
+
+
 def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     low = name.lower()
+    agent_seed = seed if seed is not None else 42
     if low == "random":
-        return RandomAgent(seed=seed if seed is not None else 42)
+        return RandomAgent(seed=agent_seed)
     elif low == "heuristic":
         return HeuristicAgent()
     elif low == "equity":
@@ -25,18 +53,23 @@ def instantiate_agent(name: str, seed: int | None = None) -> Agent:
     elif low == "mccfr_1000m":
         p = Path("models/mccfr_plus_1000M.bin")
         if p.is_file():
-            return NativeCFRAgent.from_checkpoint(p, seed=seed if seed is not None else 42)
-        return NativeCFRAgent(capacity=1024, seed=seed if seed is not None else 42)
-    else:
-        p = Path(name)
-        if p.is_file():
-            if p.suffix == ".pt":
-                from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
+            return _load_cached_cfr(p, agent_seed)
+        raise ValueError(f"Unknown or unavailable agent: {name}")
 
-                return DeepCFRAgent.from_checkpoint(p, seed=seed if seed is not None else 42)
-            return NativeCFRAgent.from_checkpoint(p, seed=seed if seed is not None else 42)
-        # fallback to NativeCFRAgent
-        return NativeCFRAgent(capacity=1024, seed=seed if seed is not None else 42)
+    if ".." in name or "/" in name or "\\" in name or "_step_" in name:
+        raise ValueError(f"Unknown or unavailable agent: {name}")
+
+    if name in discover_agents():
+        bin_p = Path(f"models/{name}.bin")
+        if bin_p.is_file():
+            return _load_cached_cfr(bin_p, agent_seed)
+        pt_p = Path(f"models/{name}.pt")
+        if pt_p.is_file():
+            from truco_bot.agents.deep_cfr.agent import DeepCFRAgent
+
+            return DeepCFRAgent.from_checkpoint(pt_p, seed=agent_seed)
+
+    raise ValueError(f"Unknown or unavailable agent: {name}")
 
 
 class MatchSession:
@@ -57,6 +90,7 @@ class MatchSession:
         self.seed = seed
 
         self.match = TrucoMatch(target_score=target_score, seed=seed)
+        self._event_cursor = 0
 
         if mode == "human_vs_bot":
             self.bot_agent = instantiate_agent(bot_name, seed=seed)
@@ -135,6 +169,19 @@ class MatchSession:
 
     def get_view(self, player: int = 0) -> dict[str, Any]:
         return self.match.get_view(player)
+
+    @property
+    def events(self) -> list[dict[str, Any]]:
+        return self.match.events
+
+    def pop_events(self) -> list[dict[str, Any]]:
+        """Return only the events recorded since the previous WebSocket frame."""
+        events = self.match.events
+        if self._event_cursor > len(events):  # match was reset under us
+            self._event_cursor = 0
+        new_events = events[self._event_cursor :]
+        self._event_cursor = len(events)
+        return new_events
 
     @property
     def is_match_done(self) -> bool:

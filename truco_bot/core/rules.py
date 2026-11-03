@@ -1,21 +1,33 @@
 from truco_bot.core.card import Card
 
 
-def calculate_envido(cards: list[Card]) -> int:
-    by_suit: dict[int, list[int]] = {}
+def get_envido_cards(cards: list[Card]) -> list[Card]:
+    """Return the 1 or 2 cards from a hand that form its Envido score."""
+    if not cards:
+        return []
+    by_suit: dict[int, list[Card]] = {}
     for card in cards:
-        by_suit.setdefault(card.suit.value, []).append(card.envido_value)
+        by_suit.setdefault(card.suit.value, []).append(card)
+    pairs = [cs for cs in by_suit.values() if len(cs) >= 2]
+    if pairs:
+        best_suit = max(
+            pairs,
+            key=lambda cs: sum(
+                c.envido_value
+                for c in sorted(cs, key=lambda c: (c.envido_value, c.number), reverse=True)[:2]
+            ),
+        )
+        return sorted(best_suit, key=lambda c: (c.envido_value, c.number), reverse=True)[:2]
+    return [max(cards, key=lambda c: (c.envido_value, c.number))]
 
-    max_envido = 0
-    for values in by_suit.values():
-        if len(values) >= 2:
-            values.sort(reverse=True)
-            score = values[0] + values[1] + 20
-        else:
-            score = values[0]
-        max_envido = max(max_envido, score)
 
-    return max_envido
+def calculate_envido(cards: list[Card]) -> int:
+    env_cards = get_envido_cards(cards)
+    if not env_cards:
+        return 0
+    if len(env_cards) >= 2:
+        return env_cards[0].envido_value + env_cards[1].envido_value + 20
+    return env_cards[0].envido_value
 
 
 def compare_cards(c1: Card, c2: Card) -> int:

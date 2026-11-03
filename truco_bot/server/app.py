@@ -1,8 +1,32 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pathlib import Path
 
-from truco_bot.server.controller import MatchSession
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from truco_bot.server.controller import MatchSession, discover_agents
 
 app = FastAPI(title="Truco Bot API")
+static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.middleware("http")
+async def disable_static_cache(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.endswith((".js", ".css", ".html")):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@app.get("/")
+def get_index():
+    return FileResponse(static_dir / "index.html")
+
+
+@app.get("/agents")
+def get_agents():
+    return {"agents": discover_agents()}
 
 
 @app.websocket("/play")
@@ -36,6 +60,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                     {
                         "type": "state",
                         "state": session.get_view(player=0),
+                        "events": session.pop_events(),
                     }
                 )
 
@@ -54,15 +79,15 @@ async def websocket_play(websocket: WebSocket) -> None:
                                 session.match.state.match_score_p0,
                                 session.match.state.match_score_p1,
                             ],
+                            "events": session.pop_events(),
                         }
                     )
                 else:
-                    if session.is_hand_done:
-                        session.next_hand()
                     await websocket.send_json(
                         {
                             "type": "state",
                             "state": session.get_view(player=0),
+                            "events": session.pop_events(),
                         }
                     )
 
@@ -76,6 +101,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                     {
                         "type": "state",
                         "state": session.get_view(player=0),
+                        "events": session.pop_events(),
                     }
                 )
 
@@ -94,6 +120,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                                 session.match.state.match_score_p0,
                                 session.match.state.match_score_p1,
                             ],
+                            "events": session.pop_events(),
                         }
                     )
                 else:
@@ -101,6 +128,7 @@ async def websocket_play(websocket: WebSocket) -> None:
                         {
                             "type": "state",
                             "state": session.get_view(player=0),
+                            "events": session.pop_events(),
                         }
                     )
 
